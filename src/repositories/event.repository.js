@@ -3,6 +3,7 @@ const pool = require("../config/database");
 const EVENT_FIELDS = `
   id,
   title,
+  slug,
   description,
   event_type,
   start_at,
@@ -18,6 +19,7 @@ function mapEvent(row) {
   return {
     id: row.id,
     title: row.title,
+    slug: row.slug,
     description: row.description,
     eventType: row.event_type,
     startAt: row.start_at,
@@ -45,6 +47,7 @@ async function insertEvent(event) {
     `
       INSERT INTO coinpsi.events (
         title,
+        slug,
         description,
         event_type,
         start_at,
@@ -53,11 +56,12 @@ async function insertEvent(event) {
         modality,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING ${EVENT_FIELDS}
     `,
     [
       event.title,
+      event.slug,
       event.description,
       event.eventType,
       event.startAt,
