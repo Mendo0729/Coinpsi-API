@@ -52,7 +52,24 @@ function normalizeOptionalText(value) {
   return normalized || null;
 }
 
+function createEventSlug(title) {
+  const baseSlug = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "evento";
+
+  const uniqueSuffix = `${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+
+  return `${baseSlug}-${uniqueSuffix}`;
+}
+
 function normalizeNewEvent(payload = {}) {
+  const title = normalizeRequiredText(payload.title, "title");
   const startAt = normalizeDate(payload.startAt, "startAt", true);
   const endAt = normalizeDate(payload.endAt, "endAt");
   const status = String(payload.status || "draft").trim().toLowerCase();
@@ -79,7 +96,8 @@ function normalizeNewEvent(payload = {}) {
   }
 
   return {
-    title: normalizeRequiredText(payload.title, "title"),
+    title,
+    slug: createEventSlug(title),
     description: normalizeRequiredText(payload.description, "description"),
     eventType: normalizeRequiredText(payload.eventType, "eventType"),
     startAt,
