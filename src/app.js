@@ -1,3 +1,4 @@
+const cors = require("cors");
 const express = require("express");
 
 const authRoutes = require("./routes/auth.routes");
@@ -5,6 +6,15 @@ const { getDatabaseHealth } = require("./services/health.service");
 
 const app = express();
 
+const adminOrigin = process.env.ADMIN_ORIGIN || "http://localhost:3001";
+
+app.use(
+  cors({
+    origin: adminOrigin,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 app.use(express.json());
 app.use("/api/v1/auth", authRoutes);
 
