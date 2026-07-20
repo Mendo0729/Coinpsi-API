@@ -1,6 +1,7 @@
 const cors = require("cors");
 const express = require("express");
 
+const adminEventRoutes = require("./routes/admin-event.routes");
 const authRoutes = require("./routes/auth.routes");
 const { getDatabaseHealth } = require("./services/health.service");
 
@@ -17,6 +18,7 @@ app.use(
 );
 app.use(express.json());
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/admin/events", adminEventRoutes);
 
 app.get("/health", async (req, res) => {
   try {
