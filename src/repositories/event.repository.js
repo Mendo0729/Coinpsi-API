@@ -15,6 +15,12 @@ const EVENT_FIELDS = `
   updated_at
 `;
 
+const DATABASE_TO_API_MODALITY = {
+  presencial: "in_person",
+  virtual: "virtual",
+  hibrido: "hybrid"
+};
+
 function mapEvent(row) {
   return {
     id: row.id,
@@ -25,7 +31,7 @@ function mapEvent(row) {
     startAt: row.start_at,
     endAt: row.end_at,
     location: row.location,
-    modality: row.modality,
+    modality: DATABASE_TO_API_MODALITY[row.modality] || row.modality,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
