@@ -4,7 +4,11 @@ const {
 } = require("../repositories/event.repository");
 
 const VALID_STATUSES = new Set(["draft", "published"]);
-const VALID_MODALITIES = new Set(["in_person", "virtual", "hybrid"]);
+const MODALITY_TO_DATABASE = {
+  in_person: "presencial",
+  virtual: "virtual",
+  hybrid: "hibrido"
+};
 
 function createValidationError(message, details = {}) {
   const error = new Error(message);
@@ -73,7 +77,8 @@ function normalizeNewEvent(payload = {}) {
   const startAt = normalizeDate(payload.startAt, "startAt", true);
   const endAt = normalizeDate(payload.endAt, "endAt");
   const status = String(payload.status || "draft").trim().toLowerCase();
-  const modality = String(payload.modality ?? "").trim().toLowerCase();
+  const requestedModality = String(payload.modality ?? "").trim().toLowerCase();
+  const modality = MODALITY_TO_DATABASE[requestedModality];
 
   if (!VALID_STATUSES.has(status)) {
     throw createValidationError("status debe ser draft o published.", {
@@ -81,7 +86,7 @@ function normalizeNewEvent(payload = {}) {
     });
   }
 
-  if (!VALID_MODALITIES.has(modality)) {
+  if (!modality) {
     throw createValidationError(
       "modality debe ser in_person, virtual o hybrid.",
       { field: "modality" }
