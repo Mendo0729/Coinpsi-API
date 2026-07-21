@@ -5,18 +5,18 @@ const {
 const { findAdminById } = require("../repositories/admin-user.repository");
 
 async function login(req, res) {
-  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  const username = String(req.body?.username ?? "").trim().toLowerCase();
   const password = String(req.body?.password ?? "");
 
-  if (!email || !password) {
+  if (!username || !password) {
     return res.status(400).json({
       error: "VALIDATION_ERROR",
-      message: "Correo y contraseña son obligatorios."
+      message: "Usuario y contraseña son obligatorios."
     });
   }
 
   try {
-    const session = await authenticateAdmin(email, password);
+    const session = await authenticateAdmin(username, password);
 
     return res.status(200).json({
       status: "ok",
@@ -26,7 +26,7 @@ async function login(req, res) {
     if (error.code === INVALID_CREDENTIALS) {
       return res.status(401).json({
         error: "INVALID_CREDENTIALS",
-        message: "Correo o contraseña incorrectos."
+        message: "Usuario o contraseña incorrectos."
       });
     }
 
@@ -55,6 +55,7 @@ async function me(req, res) {
       user: {
         id: admin.id,
         fullName: admin.full_name,
+        username: admin.username,
         email: admin.email,
         role: admin.role
       }

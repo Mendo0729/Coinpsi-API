@@ -1,20 +1,21 @@
 const pool = require("../config/database");
 
-async function findAdminByEmail(email) {
+async function findAdminByUsername(username) {
   const result = await pool.query(
     `
       SELECT
         id,
         full_name,
+        username,
         email,
         password_hash,
         role,
         is_active
       FROM coinpsi.admin_users
-      WHERE LOWER(email) = LOWER($1)
+      WHERE LOWER(username) = LOWER($1)
       LIMIT 1
     `,
-    [email]
+    [username]
   );
 
   return result.rows[0] ?? null;
@@ -26,6 +27,7 @@ async function findAdminById(id) {
       SELECT
         id,
         full_name,
+        username,
         email,
         role,
         is_active
@@ -40,6 +42,6 @@ async function findAdminById(id) {
 }
 
 module.exports = {
-  findAdminByEmail,
-  findAdminById
+  findAdminById,
+  findAdminByUsername
 };

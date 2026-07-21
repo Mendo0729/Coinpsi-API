@@ -21,7 +21,7 @@ function requireAuth(req, res, next) {
 
     req.auth = {
       userId: String(payload.sub),
-      email: payload.email,
+      username: payload.username,
       role: payload.role
     };
 

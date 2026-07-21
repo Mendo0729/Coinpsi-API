@@ -2,7 +2,9 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const { getEnv } = require("../config/env");
-const { findAdminByEmail } = require("../repositories/admin-user.repository");
+const {
+  findAdminByUsername
+} = require("../repositories/admin-user.repository");
 
 const INVALID_CREDENTIALS = "INVALID_CREDENTIALS";
 
@@ -12,8 +14,8 @@ function createAuthError(code) {
   return error;
 }
 
-async function authenticateAdmin(email, password) {
-  const admin = await findAdminByEmail(email);
+async function authenticateAdmin(username, password) {
+  const admin = await findAdminByUsername(username);
 
   if (!admin || !admin.is_active) {
     throw createAuthError(INVALID_CREDENTIALS);
@@ -29,7 +31,7 @@ async function authenticateAdmin(email, password) {
   const token = jwt.sign(
     {
       role: admin.role,
-      email: admin.email
+      username: admin.username
     },
     getEnv("JWT_SECRET"),
     {
@@ -47,6 +49,7 @@ async function authenticateAdmin(email, password) {
     user: {
       id: admin.id,
       fullName: admin.full_name,
+      username: admin.username,
       email: admin.email,
       role: admin.role
     }
