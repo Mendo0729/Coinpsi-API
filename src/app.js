@@ -9,8 +9,8 @@ const { getDatabaseHealth } = require("./services/health.service");
 const app = express();
 
 const adminOrigin = process.env.ADMIN_ORIGIN || "http://localhost:3001";
-const publicOrigin = process.env.PUBLIC_ORIGIN || "http://localhost:3000";
-const allowedOrigins = new Set([adminOrigin, publicOrigin]);
+const landingOrigin = process.env.LANDING_ORIGIN || "http://localhost:3000";
+const allowedOrigins = new Set([adminOrigin, landingOrigin]);
 
 app.use(
   cors({
