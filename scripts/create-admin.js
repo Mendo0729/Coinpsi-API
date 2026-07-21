@@ -12,8 +12,16 @@ function normalizeEmail(value) {
   return value.trim().toLowerCase();
 }
 
+function normalizeUsername(value) {
+  return value.trim().toLowerCase();
+}
+
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isValidUsername(value) {
+  return /^[a-z0-9._-]{3,50}$/.test(value);
 }
 
 function readHidden(prompt) {
@@ -75,12 +83,19 @@ async function main() {
     console.log("\nCrear administrador de COINPSI\n");
 
     const fullName = (await rl.question("Nombre completo: ")).trim();
+    const username = normalizeUsername(await rl.question("Usuario: "));
     const email = normalizeEmail(await rl.question("Correo: "));
 
     rl.close();
 
     if (fullName.length < 3) {
       throw new Error("El nombre debe tener al menos 3 caracteres.");
+    }
+
+    if (!isValidUsername(username)) {
+      throw new Error(
+        "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, números, punto, guion o guion bajo."
+      );
     }
 
     if (!isValidEmail(email)) {
@@ -104,15 +119,16 @@ async function main() {
       `
         INSERT INTO coinpsi.admin_users (
           full_name,
+          username,
           email,
           password_hash,
           role,
           is_active
         )
-        VALUES ($1, $2, $3, 'admin', TRUE)
-        RETURNING id, full_name, email, role, is_active, created_at
+        VALUES ($1, $2, $3, $4, 'admin', TRUE)
+        RETURNING id, full_name, username, email, role, is_active, created_at
       `,
-      [fullName, email, passwordHash]
+      [fullName, username, email, passwordHash]
     );
 
     const admin = result.rows[0];
@@ -120,12 +136,13 @@ async function main() {
     console.log("\nAdministrador creado correctamente:");
     console.log(`ID: ${admin.id}`);
     console.log(`Nombre: ${admin.full_name}`);
+    console.log(`Usuario: ${admin.username}`);
     console.log(`Correo: ${admin.email}`);
     console.log(`Rol: ${admin.role}`);
     console.log(`Activo: ${admin.is_active ? "sí" : "no"}`);
   } catch (error) {
     if (error.code === "23505") {
-      console.error("\nYa existe un administrador con ese correo.");
+      console.error("\nYa existe un administrador con ese usuario o correo.");
       process.exitCode = 1;
       return;
     }
