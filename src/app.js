@@ -12,7 +12,7 @@ const adminOrigin = process.env.ADMIN_ORIGIN || "http://localhost:3001";
 app.use(
   cors({
     origin: adminOrigin,
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );

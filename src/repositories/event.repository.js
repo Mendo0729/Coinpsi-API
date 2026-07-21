@@ -81,7 +81,38 @@ async function insertEvent(event) {
   return mapEvent(result.rows[0]);
 }
 
+async function cancelEventById(id) {
+  const result = await pool.query(
+    `
+      UPDATE coinpsi.events
+      SET
+        status = 'cancelled',
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING ${EVENT_FIELDS}
+    `,
+    [id]
+  );
+
+  return result.rows[0] ? mapEvent(result.rows[0]) : null;
+}
+
+async function deleteEventById(id) {
+  const result = await pool.query(
+    `
+      DELETE FROM coinpsi.events
+      WHERE id = $1
+      RETURNING id
+    `,
+    [id]
+  );
+
+  return result.rows[0]?.id ?? null;
+}
+
 module.exports = {
+  cancelEventById,
+  deleteEventById,
   insertEvent,
   listAdminEvents
 };
