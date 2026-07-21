@@ -2,7 +2,8 @@ const {
   cancelAdminEvent,
   createAdminEvent,
   getAdminEvents,
-  removeAdminEvent
+  removeAdminEvent,
+  updateAdminEvent
 } = require("../services/event.service");
 
 function sendKnownError(res, error) {
@@ -65,6 +66,26 @@ async function createEvent(req, res) {
   }
 }
 
+async function updateEvent(req, res) {
+  try {
+    const event = await updateAdminEvent(req.params.id, req.body);
+
+    return res.status(200).json({
+      status: "ok",
+      event
+    });
+  } catch (error) {
+    if (sendKnownError(res, error)) return;
+
+    console.error("No fue posible editar el evento:", error.message);
+
+    return res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "No fue posible editar el evento."
+    });
+  }
+}
+
 async function cancelEvent(req, res) {
   try {
     const event = await cancelAdminEvent(req.params.id);
@@ -109,5 +130,6 @@ module.exports = {
   cancelEvent,
   createEvent,
   deleteEvent,
-  listEvents
+  listEvents,
+  updateEvent
 };
