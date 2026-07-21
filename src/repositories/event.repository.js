@@ -15,6 +15,18 @@ const EVENT_FIELDS = `
   updated_at
 `;
 
+const PUBLIC_EVENT_FIELDS = `
+  id,
+  title,
+  slug,
+  description,
+  event_type,
+  start_at,
+  end_at,
+  location,
+  modality
+`;
+
 const DATABASE_TO_API_MODALITY = {
   presencial: "in_person",
   virtual: "virtual",
@@ -38,6 +50,20 @@ function mapEvent(row) {
   };
 }
 
+function mapPublicEvent(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    description: row.description,
+    eventType: row.event_type,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    location: row.location,
+    modality: DATABASE_TO_API_MODALITY[row.modality] || row.modality
+  };
+}
+
 async function listAdminEvents() {
   const result = await pool.query(`
     SELECT ${EVENT_FIELDS}
@@ -46,6 +72,17 @@ async function listAdminEvents() {
   `);
 
   return result.rows.map(mapEvent);
+}
+
+async function listPublishedEvents() {
+  const result = await pool.query(`
+    SELECT ${PUBLIC_EVENT_FIELDS}
+    FROM coinpsi.events
+    WHERE status = 'published'
+    ORDER BY start_at ASC, id ASC
+  `);
+
+  return result.rows.map(mapPublicEvent);
 }
 
 async function insertEvent(event) {
@@ -114,5 +151,6 @@ module.exports = {
   cancelEventById,
   deleteEventById,
   insertEvent,
-  listAdminEvents
+  listAdminEvents,
+  listPublishedEvents
 };
