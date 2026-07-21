@@ -4,7 +4,8 @@ const {
   cancelEvent,
   createEvent,
   deleteEvent,
-  listEvents
+  listEvents,
+  updateEvent
 } = require("../controllers/admin-event.controller");
 const requireAuth = require("../middleware/require-auth");
 
@@ -14,6 +15,7 @@ router.use(requireAuth);
 router.get("/", listEvents);
 router.post("/", createEvent);
 router.patch("/:id/cancel", cancelEvent);
+router.patch("/:id", updateEvent);
 router.delete("/:id", deleteEvent);
 
 module.exports = router;
