@@ -1,4 +1,6 @@
 const {
+  cancelEventById,
+  deleteEventById,
   insertEvent,
   listAdminEvents
 } = require("../repositories/event.repository");
@@ -17,6 +19,24 @@ function createValidationError(message, details = {}) {
   return error;
 }
 
+function createNotFoundError() {
+  const error = new Error("El evento solicitado no existe.");
+  error.code = "EVENT_NOT_FOUND";
+  return error;
+}
+
+function normalizeEventId(value) {
+  const id = String(value ?? "").trim();
+
+  if (!/^[1-9]\d*$/.test(id)) {
+    throw createValidationError("El identificador del evento no es valido.", {
+      field: "id"
+    });
+  }
+
+  return id;
+}
+
 function normalizeDate(value, fieldName, required = false) {
   if (value === undefined || value === null || value === "") {
     if (required) {
@@ -31,7 +51,7 @@ function normalizeDate(value, fieldName, required = false) {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    throw createValidationError(`${fieldName} debe contener una fecha válida.`, {
+    throw createValidationError(`${fieldName} debe contener una fecha valida.`, {
       field: fieldName
     });
   }
@@ -121,7 +141,29 @@ async function createAdminEvent(payload) {
   return insertEvent(normalizeNewEvent(payload));
 }
 
+async function cancelAdminEvent(id) {
+  const event = await cancelEventById(normalizeEventId(id));
+
+  if (!event) {
+    throw createNotFoundError();
+  }
+
+  return event;
+}
+
+async function removeAdminEvent(id) {
+  const deletedId = await deleteEventById(normalizeEventId(id));
+
+  if (!deletedId) {
+    throw createNotFoundError();
+  }
+
+  return deletedId;
+}
+
 module.exports = {
+  cancelAdminEvent,
   createAdminEvent,
-  getAdminEvents
+  getAdminEvents,
+  removeAdminEvent
 };
