@@ -2,7 +2,8 @@ const {
   cancelEventById,
   deleteEventById,
   insertEvent,
-  listAdminEvents
+  listAdminEvents,
+  listPublishedEvents
 } = require("../repositories/event.repository");
 
 const VALID_STATUSES = new Set(["draft", "published"]);
@@ -137,6 +138,10 @@ async function getAdminEvents() {
   return listAdminEvents();
 }
 
+async function getPublishedEvents() {
+  return listPublishedEvents();
+}
+
 async function createAdminEvent(payload) {
   return insertEvent(normalizeNewEvent(payload));
 }
@@ -165,5 +170,6 @@ module.exports = {
   cancelAdminEvent,
   createAdminEvent,
   getAdminEvents,
+  getPublishedEvents,
   removeAdminEvent
 };
