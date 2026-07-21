@@ -3,10 +3,12 @@ const {
   deleteEventById,
   insertEvent,
   listAdminEvents,
-  listPublishedEvents
+  listPublishedEvents,
+  updateEventById
 } = require("../repositories/event.repository");
 
-const VALID_STATUSES = new Set(["draft", "published"]);
+const VALID_CREATE_STATUSES = new Set(["draft", "published"]);
+const VALID_UPDATE_STATUSES = new Set(["draft", "published", "finished", "cancelled"]);
 const MODALITY_TO_DATABASE = {
   in_person: "presencial",
   virtual: "virtual",
@@ -77,6 +79,22 @@ function normalizeOptionalText(value) {
   return normalized || null;
 }
 
+function normalizeWhatsappNumber(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const digits = raw.replace(/\D/g, "");
+
+  if (digits.length < 8 || digits.length > 15) {
+    throw createValidationError(
+      "whatsappNumber debe incluir codigo de pais y contener entre 8 y 15 digitos.",
+      { field: "whatsappNumber" }
+    );
+  }
+
+  return digits;
+}
+
 function createEventSlug(title) {
   const baseSlug = title
     .normalize("NFD")
@@ -93,18 +111,23 @@ function createEventSlug(title) {
   return `${baseSlug}-${uniqueSuffix}`;
 }
 
-function normalizeNewEvent(payload = {}) {
+function normalizeEventPayload(payload = {}, { allowAllStatuses = false } = {}) {
   const title = normalizeRequiredText(payload.title, "title");
   const startAt = normalizeDate(payload.startAt, "startAt", true);
   const endAt = normalizeDate(payload.endAt, "endAt");
   const status = String(payload.status || "draft").trim().toLowerCase();
   const requestedModality = String(payload.modality ?? "").trim().toLowerCase();
   const modality = MODALITY_TO_DATABASE[requestedModality];
+  const whatsappNumber = normalizeWhatsappNumber(payload.whatsappNumber);
+  const validStatuses = allowAllStatuses ? VALID_UPDATE_STATUSES : VALID_CREATE_STATUSES;
 
-  if (!VALID_STATUSES.has(status)) {
-    throw createValidationError("status debe ser draft o published.", {
-      field: "status"
-    });
+  if (!validStatuses.has(status)) {
+    throw createValidationError(
+      allowAllStatuses
+        ? "status debe ser draft, published, finished o cancelled."
+        : "status debe ser draft o published.",
+      { field: "status" }
+    );
   }
 
   if (!modality) {
@@ -121,15 +144,25 @@ function normalizeNewEvent(payload = {}) {
     );
   }
 
+  if (status === "published" && !whatsappNumber) {
+    throw createValidationError(
+      "whatsappNumber es obligatorio para publicar el evento.",
+      { field: "whatsappNumber" }
+    );
+  }
+
   return {
     title,
-    slug: createEventSlug(title),
     description: normalizeRequiredText(payload.description, "description"),
     eventType: normalizeRequiredText(payload.eventType, "eventType"),
     startAt,
     endAt,
     location: normalizeOptionalText(payload.location),
     modality,
+    whatsappNumber,
+    whatsappMessage: whatsappNumber
+      ? normalizeOptionalText(payload.whatsappMessage) || `Hola, deseo recibir informacion sobre el evento ${title}.`
+      : null,
     status
   };
 }
@@ -143,7 +176,24 @@ async function getPublishedEvents() {
 }
 
 async function createAdminEvent(payload) {
-  return insertEvent(normalizeNewEvent(payload));
+  const event = normalizeEventPayload(payload);
+  return insertEvent({
+    ...event,
+    slug: createEventSlug(event.title)
+  });
+}
+
+async function updateAdminEvent(id, payload) {
+  const event = await updateEventById(
+    normalizeEventId(id),
+    normalizeEventPayload(payload, { allowAllStatuses: true })
+  );
+
+  if (!event) {
+    throw createNotFoundError();
+  }
+
+  return event;
 }
 
 async function cancelAdminEvent(id) {
@@ -171,5 +221,6 @@ module.exports = {
   createAdminEvent,
   getAdminEvents,
   getPublishedEvents,
-  removeAdminEvent
+  removeAdminEvent,
+  updateAdminEvent
 };

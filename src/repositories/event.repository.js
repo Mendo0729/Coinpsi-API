@@ -10,6 +10,8 @@ const EVENT_FIELDS = `
   end_at,
   location,
   modality,
+  whatsapp_number,
+  whatsapp_message,
   status,
   created_at,
   updated_at
@@ -24,7 +26,9 @@ const PUBLIC_EVENT_FIELDS = `
   start_at,
   end_at,
   location,
-  modality
+  modality,
+  whatsapp_number,
+  whatsapp_message
 `;
 
 const DATABASE_TO_API_MODALITY = {
@@ -44,6 +48,8 @@ function mapEvent(row) {
     endAt: row.end_at,
     location: row.location,
     modality: DATABASE_TO_API_MODALITY[row.modality] || row.modality,
+    whatsappNumber: row.whatsapp_number,
+    whatsappMessage: row.whatsapp_message,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -60,7 +66,9 @@ function mapPublicEvent(row) {
     startAt: row.start_at,
     endAt: row.end_at,
     location: row.location,
-    modality: DATABASE_TO_API_MODALITY[row.modality] || row.modality
+    modality: DATABASE_TO_API_MODALITY[row.modality] || row.modality,
+    whatsappNumber: row.whatsapp_number,
+    whatsappMessage: row.whatsapp_message
   };
 }
 
@@ -97,9 +105,11 @@ async function insertEvent(event) {
         end_at,
         location,
         modality,
+        whatsapp_number,
+        whatsapp_message,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING ${EVENT_FIELDS}
     `,
     [
@@ -111,11 +121,50 @@ async function insertEvent(event) {
       event.endAt,
       event.location,
       event.modality,
+      event.whatsappNumber,
+      event.whatsappMessage,
       event.status
     ]
   );
 
   return mapEvent(result.rows[0]);
+}
+
+async function updateEventById(id, event) {
+  const result = await pool.query(
+    `
+      UPDATE coinpsi.events
+      SET
+        title = $2,
+        description = $3,
+        event_type = $4,
+        start_at = $5,
+        end_at = $6,
+        location = $7,
+        modality = $8,
+        whatsapp_number = $9,
+        whatsapp_message = $10,
+        status = $11,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING ${EVENT_FIELDS}
+    `,
+    [
+      id,
+      event.title,
+      event.description,
+      event.eventType,
+      event.startAt,
+      event.endAt,
+      event.location,
+      event.modality,
+      event.whatsappNumber,
+      event.whatsappMessage,
+      event.status
+    ]
+  );
+
+  return result.rows[0] ? mapEvent(result.rows[0]) : null;
 }
 
 async function cancelEventById(id) {
@@ -152,5 +201,6 @@ module.exports = {
   deleteEventById,
   insertEvent,
   listAdminEvents,
-  listPublishedEvents
+  listPublishedEvents,
+  updateEventById
 };
