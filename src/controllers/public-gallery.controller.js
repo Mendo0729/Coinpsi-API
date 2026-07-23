@@ -3,8 +3,8 @@ const {
   getPublicGalleryItems
 } = require("../services/gallery-selection.service");
 const {
-  getDriveImageContent
-} = require("../services/google-drive-gallery.service");
+  getOptimizedDriveImage
+} = require("../services/image-optimization.service");
 
 function listPublicGallery(req, res) {
   try {
@@ -33,18 +33,21 @@ async function streamPublicGalleryImage(req, res) {
   }
 
   try {
-    const image = await getDriveImageContent(selectedItem.fileId);
-    res.set("Content-Type", image.metadata.mimeType);
-    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
-    if (image.metadata.size) res.set("Content-Length", String(image.metadata.size));
+    const image = await getOptimizedDriveImage(selectedItem.fileId, "medium");
+    const etag = `"${image.cacheKey}-${image.variant}"`;
 
-    image.stream.on("error", (error) => {
-      console.error("Google Drive interrumpio la imagen publica:", error.message);
-      if (!res.headersSent) res.status(502).end();
-      else res.destroy(error);
-    });
+    if (req.headers["if-none-match"] === etag) {
+      return res.status(304).end();
+    }
 
-    return image.stream.pipe(res);
+    res.set("Content-Type", image.mimeType);
+    res.set("Content-Length", String(image.buffer.length));
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+    res.set("ETag", etag);
+    res.set("X-Coinpsi-Image-Variant", image.variant);
+    res.set("X-Coinpsi-Image-Cache", image.cacheStatus);
+
+    return res.status(200).send(image.buffer);
   } catch (error) {
     console.error("No fue posible entregar la imagen publica:", error.message);
     return res.status(502).json({
