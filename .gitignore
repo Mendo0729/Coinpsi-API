@@ -7,6 +7,7 @@ node_modules/
 .google-drive-token.json
 .gallery-selection.json
 .gallery-selection.json.tmp
+.image-cache/
 logs/
 *.log
 coverage/
