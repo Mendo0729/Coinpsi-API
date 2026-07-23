@@ -5,6 +5,8 @@ node_modules/
 !.env.development.example
 !.env.production.example
 .google-drive-token.json
+.gallery-selection.json
+.gallery-selection.json.tmp
 logs/
 *.log
 coverage/
