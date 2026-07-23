@@ -33,21 +33,38 @@ function normalizeSettings(inputSettings = {}) {
   const rotation = ALLOWED_ROTATIONS.has(input.rotation)
     ? input.rotation
     : defaults.rotation;
-  const parsedRandomCount = Number.parseInt(input.randomCount, 10);
-  const randomCount = Number.isFinite(parsedRandomCount)
-    ? Math.min(MAX_GALLERY_ITEMS, Math.max(1, parsedRandomCount))
-    : defaults.randomCount;
+  const rawDisplayCount = input.displayCount ?? input.randomCount;
+  const parsedDisplayCount = Number.parseInt(rawDisplayCount, 10);
+  const displayCount = Number.isFinite(parsedDisplayCount)
+    ? Math.min(MAX_GALLERY_ITEMS, Math.max(1, parsedDisplayCount))
+    : defaults.displayCount;
 
   return {
     mode,
     rotation,
-    randomCount,
+    displayCount,
     timezone: normalizeText(
       input.timezone,
       defaults.timezone || "America/Panama",
       100
     ) || "America/Panama"
   };
+}
+
+function validateSettingsAgainstItems(settings, items) {
+  if (settings.mode !== "mixed") return;
+
+  const fixedCount = items.filter((item) => item.isFeatured).length;
+  if (fixedCount > settings.displayCount) {
+    throw createValidationError(
+      `La cantidad total debe ser igual o mayor que las ${fixedCount} imagenes fijas del modo mixto.`,
+      {
+        field: "settings.displayCount",
+        fixedCount,
+        displayCount: settings.displayCount
+      }
+    );
+  }
 }
 
 function sortByConfiguredOrder(items) {
@@ -137,29 +154,42 @@ function selectPublicItems(config) {
     rotationKey,
     config.updatedAt || "initial",
     settings.mode,
-    settings.randomCount
+    settings.displayCount
   ].join("|");
 
   if (settings.mode === "manual") {
-    return { items: published, settings, rotationKey };
-  }
-
-  if (settings.mode === "random") {
     return {
-      items: shuffleItems(published, seed).slice(0, settings.randomCount),
+      items: published,
       settings,
-      rotationKey
+      rotationKey,
+      fixedCount: published.length,
+      randomFillCount: 0
     };
   }
 
-  const featured = published.filter((item) => item.isFeatured);
+  if (settings.mode === "random") {
+    const items = shuffleItems(published, seed).slice(0, settings.displayCount);
+    return {
+      items,
+      settings,
+      rotationKey,
+      fixedCount: 0,
+      randomFillCount: items.length
+    };
+  }
+
+  const fixed = published.filter((item) => item.isFeatured);
   const candidates = published.filter((item) => !item.isFeatured);
-  const randomItems = shuffleItems(candidates, seed).slice(0, settings.randomCount);
+  const fixedItems = fixed.slice(0, settings.displayCount);
+  const remainingSlots = Math.max(0, settings.displayCount - fixedItems.length);
+  const randomItems = shuffleItems(candidates, seed).slice(0, remainingSlots);
 
   return {
-    items: [...featured, ...randomItems],
+    items: [...fixedItems, ...randomItems],
     settings,
-    rotationKey
+    rotationKey,
+    fixedCount: fixedItems.length,
+    randomFillCount: randomItems.length
   };
 }
 
@@ -191,7 +221,9 @@ async function getPublicGalleryItems() {
     items: selected.items.map(mapPublicItem),
     settings: selected.settings,
     rotationKey: selected.rotationKey,
-    sourceCount: record.config.items.filter((item) => item.published !== false).length
+    sourceCount: record.config.items.filter((item) => item.published !== false).length,
+    fixedCount: selected.fixedCount,
+    randomFillCount: selected.randomFillCount
   };
 }
 
@@ -292,8 +324,10 @@ async function replaceGallerySelection(inputItems, inputSettings = null) {
     });
   }
 
+  validateSettingsAgainstItems(settings, normalizedItems);
+
   const config = {
-    version: 2,
+    version: 3,
     settings,
     updatedAt: new Date().toISOString(),
     items: normalizedItems
