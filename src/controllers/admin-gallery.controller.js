@@ -3,22 +3,25 @@ const {
   replaceGallerySelection
 } = require("../services/gallery-selection.service");
 
-function listGallerySelection(req, res) {
+async function listGallerySelection(req, res) {
   try {
-    const selection = getAdminGallerySelection();
+    const selection = await getAdminGallerySelection();
     return res.status(200).json({ status: "ok", selection });
   } catch (error) {
-    console.error("No fue posible consultar la seleccion de galeria:", error.message);
+    console.error("No fue posible consultar la configuracion de galeria:", error.message);
     return res.status(500).json({
-      error: "GALLERY_SELECTION_ERROR",
-      message: "No fue posible consultar la seleccion de galeria."
+      error: error.code || "GALLERY_SELECTION_ERROR",
+      message: error.message || "No fue posible consultar la configuracion de galeria."
     });
   }
 }
 
 async function saveGallerySelection(req, res) {
   try {
-    const selection = await replaceGallerySelection(req.body?.items);
+    const selection = await replaceGallerySelection(
+      req.body?.items,
+      req.body?.settings
+    );
     return res.status(200).json({ status: "ok", selection });
   } catch (error) {
     if (error.code === "VALIDATION_ERROR") {
@@ -29,10 +32,10 @@ async function saveGallerySelection(req, res) {
       });
     }
 
-    console.error("No fue posible guardar la seleccion de galeria:", error.message);
+    console.error("No fue posible guardar la configuracion de galeria:", error.message);
     return res.status(400).json({
       error: error.code || "GALLERY_SELECTION_ERROR",
-      message: error.message || "No fue posible guardar la seleccion de galeria."
+      message: error.message || "No fue posible guardar la configuracion de galeria."
     });
   }
 }
