@@ -204,7 +204,7 @@ async function getPublicGalleryItem(fileId) {
   ) || null;
 }
 
-async function replaceGallerySelection(inputItems, inputSettings = {}) {
+async function replaceGallerySelection(inputItems, inputSettings = null) {
   if (!Array.isArray(inputItems)) {
     throw createValidationError("items debe ser una lista.", { field: "items" });
   }
@@ -216,7 +216,16 @@ async function replaceGallerySelection(inputItems, inputSettings = {}) {
     );
   }
 
-  const settings = normalizeSettings(inputSettings);
+  const currentRecord = await readGalleryConfig();
+  const currentItems = new Map(
+    currentRecord.config.items.map((item) => [item.fileId, item])
+  );
+  const hasExplicitSettings = inputSettings
+    && typeof inputSettings === "object"
+    && Object.keys(inputSettings).length > 0;
+  const settings = normalizeSettings(
+    hasExplicitSettings ? inputSettings : currentRecord.config.settings
+  );
   const uniqueIds = new Set();
   const normalizedItems = [];
 
@@ -233,7 +242,14 @@ async function replaceGallerySelection(inputItems, inputSettings = {}) {
     if (uniqueIds.has(fileId)) continue;
     uniqueIds.add(fileId);
 
-    const metadata = await getDriveImageMetadata(fileId);
+    const currentItem = currentItems.get(fileId) || null;
+    const metadata = currentItem?.mimeType
+      ? {
+          name: currentItem.name,
+          mimeType: currentItem.mimeType,
+          size: currentItem.size
+        }
+      : await getDriveImageMetadata(fileId);
     const baseTitle = String(metadata.name || "Imagen COINPSI")
       .replace(/\.[a-z0-9]{2,8}$/i, "")
       .replace(/[_-]+/g, " ")
@@ -244,15 +260,35 @@ async function replaceGallerySelection(inputItems, inputSettings = {}) {
       name: metadata.name,
       mimeType: metadata.mimeType,
       size: metadata.size || null,
-      folderId: normalizeText(input.folderId, "", 200) || null,
-      folderName: normalizeText(input.folderName, "", 180) || null,
-      title: normalizeText(input.title, baseTitle || "Imagen COINPSI", 180),
-      description: normalizeText(input.description, "Actividad realizada por COINPSI.", 500),
-      category: normalizeText(input.category, input.folderName || "Galeria", 80) || "Galeria",
+      folderId: normalizeText(
+        input.folderId,
+        currentItem?.folderId || "",
+        200
+      ) || null,
+      folderName: normalizeText(
+        input.folderName,
+        currentItem?.folderName || "",
+        180
+      ) || null,
+      title: normalizeText(
+        input.title,
+        currentItem?.title || baseTitle || "Imagen COINPSI",
+        180
+      ),
+      description: normalizeText(
+        input.description,
+        currentItem?.description || "Actividad realizada por COINPSI.",
+        500
+      ),
+      category: normalizeText(
+        input.category,
+        currentItem?.category || input.folderName || "Galeria",
+        80
+      ) || "Galeria",
       isFeatured: Boolean(input.isFeatured),
       published: true,
       sortOrder: normalizedItems.length,
-      selectedAt: input.selectedAt || new Date().toISOString()
+      selectedAt: input.selectedAt || currentItem?.selectedAt || new Date().toISOString()
     });
   }
 
