@@ -5,7 +5,10 @@ const {
 
 async function getFolderContents(req, res) {
   try {
-    const result = await listDriveFolder(req.params.folderId || null);
+    const result = await listDriveFolder(
+      req.params.folderId || null,
+      req.query.pageToken || null
+    );
     return res.status(200).json({ status: "ok", ...result });
   } catch (error) {
     console.error("No fue posible consultar la carpeta de Google Drive:", error.message);

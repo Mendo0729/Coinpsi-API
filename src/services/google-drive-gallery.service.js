@@ -6,6 +6,8 @@ const { getEnv } = require("../config/env");
 
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{10,200}$/;
+const IMAGE_PAGE_SIZE = 20;
+const MAX_FOLDERS = 200;
 
 function createDriveError(code, message) {
   const error = new Error(message);
@@ -19,6 +21,17 @@ function normalizeFileId(value, fallback = null) {
     throw createDriveError("GOOGLE_DRIVE_FILE_ID_INVALID", "El identificador de Google Drive no es valido.");
   }
   return fileId;
+}
+
+function normalizePageToken(value) {
+  const pageToken = String(value || "").trim();
+  if (!pageToken) return undefined;
+
+  if (pageToken.length > 2000) {
+    throw createDriveError("GOOGLE_DRIVE_PAGE_TOKEN_INVALID", "El token de paginacion no es valido.");
+  }
+
+  return pageToken;
 }
 
 function readCredentials() {
@@ -66,7 +79,69 @@ function escapeQuery(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-async function listDriveFolder(folderId = null) {
+function mapFolderItem(item) {
+  return {
+    ...item,
+    isFolder: true,
+    isImage: false
+  };
+}
+
+function mapImageItem(item) {
+  return {
+    ...item,
+    isFolder: false,
+    isImage: true
+  };
+}
+
+async function listChildFolders(drive, folderId) {
+  const folders = [];
+  let pageToken;
+
+  do {
+    const response = await drive.files.list({
+      q: [
+        `'${escapeQuery(folderId)}' in parents`,
+        `mimeType = '${FOLDER_MIME_TYPE}'`,
+        "trashed = false"
+      ].join(" and "),
+      spaces: "drive",
+      orderBy: "name_natural",
+      pageSize: 100,
+      pageToken,
+      fields: "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,parents,webViewLink)"
+    });
+
+    folders.push(...(response.data.files || []));
+    pageToken = response.data.nextPageToken;
+  } while (pageToken && folders.length < MAX_FOLDERS);
+
+  return folders.slice(0, MAX_FOLDERS).map(mapFolderItem);
+}
+
+async function listChildImages(drive, folderId, pageToken) {
+  const response = await drive.files.list({
+    q: [
+      `'${escapeQuery(folderId)}' in parents`,
+      "mimeType contains 'image/'",
+      "trashed = false"
+    ].join(" and "),
+    spaces: "drive",
+    orderBy: "name_natural",
+    pageSize: IMAGE_PAGE_SIZE,
+    pageToken: normalizePageToken(pageToken),
+    fields:
+      "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,parents,webViewLink,imageMediaMetadata(width,height))"
+  });
+
+  return {
+    images: (response.data.files || []).map(mapImageItem),
+    nextPageToken: response.data.nextPageToken || null
+  };
+}
+
+async function listDriveFolder(folderId = null, pageToken = null) {
   const normalizedFolderId = normalizeFileId(
     folderId,
     getEnv("GOOGLE_DRIVE_ROOT_FOLDER_ID")
@@ -82,31 +157,20 @@ async function listDriveFolder(folderId = null) {
     throw createDriveError("GOOGLE_DRIVE_NOT_FOLDER", "El elemento solicitado no es una carpeta.");
   }
 
-  const items = [];
-  let pageToken;
-
-  do {
-    const response = await drive.files.list({
-      q: `'${escapeQuery(normalizedFolderId)}' in parents and trashed = false`,
-      spaces: "drive",
-      orderBy: "folder,name_natural",
-      pageSize: 100,
-      pageToken,
-      fields:
-        "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,parents,webViewLink,imageMediaMetadata(width,height))"
-    });
-
-    items.push(...(response.data.files || []));
-    pageToken = response.data.nextPageToken;
-  } while (pageToken && items.length < 500);
+  const [folders, imagePage] = await Promise.all([
+    listChildFolders(drive, normalizedFolderId),
+    listChildImages(drive, normalizedFolderId, pageToken)
+  ]);
 
   return {
     folder: folderResponse.data,
-    items: items.slice(0, 500).map((item) => ({
-      ...item,
-      isFolder: item.mimeType === FOLDER_MIME_TYPE,
-      isImage: String(item.mimeType || "").startsWith("image/")
-    }))
+    items: [...folders, ...imagePage.images],
+    folders,
+    images: imagePage.images,
+    pagination: {
+      pageSize: IMAGE_PAGE_SIZE,
+      nextPageToken: imagePage.nextPageToken
+    }
   };
 }
 
@@ -146,6 +210,7 @@ async function getDriveImageContent(fileId) {
 
 module.exports = {
   FOLDER_MIME_TYPE,
+  IMAGE_PAGE_SIZE,
   getDriveImageContent,
   getDriveImageMetadata,
   listDriveFolder
