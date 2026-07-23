@@ -281,7 +281,7 @@ async function runDriveTest() {
   );
 
   let uploadedFile;
-  let downloadedBytes = 0;
+  let result;
   let cleanupStatus = "not-required";
 
   try {
@@ -311,14 +311,13 @@ async function runDriveTest() {
       }
     );
 
-    downloadedBytes = Buffer.from(downloadResponse.data).length;
-
+    const downloadedBytes = Buffer.from(downloadResponse.data).length;
     const metadataResponse = await drive.files.get({
       fileId: uploadedFile.id,
       fields: "id,name,mimeType,size,createdTime,parents,trashed,webViewLink"
     });
 
-    return {
+    result = {
       status: "ok",
       folder: devFolder,
       upload: metadataResponse.data,
@@ -345,10 +344,10 @@ async function runDriveTest() {
       }
     }
 
-    if (uploadedFile) {
-      uploadedFile.cleanupStatus = cleanupStatus;
-    }
+    if (result) result.cleanup.status = cleanupStatus;
   }
+
+  return result;
 }
 
 module.exports = {
