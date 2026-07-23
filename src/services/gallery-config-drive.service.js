@@ -12,6 +12,7 @@ const CONFIG_MIME_TYPE = "application/json";
 const DEFAULT_CONFIG_FOLDER_NAME = "COINPSI-CONFIG";
 const DEFAULT_CONFIG_FILE_NAME = "gallery-config.json";
 const DEFAULT_CACHE_TTL_MS = 30 * 1000;
+const MAX_GALLERY_ITEMS = 60;
 
 let memoryCache = null;
 let writeQueue = Promise.resolve();
@@ -52,11 +53,11 @@ function getLegacySelectionPath() {
 
 function getDefaultConfig() {
   return {
-    version: 2,
+    version: 3,
     settings: {
       mode: "manual",
       rotation: "daily",
-      randomCount: 6,
+      displayCount: 8,
       timezone: process.env.GALLERY_TIMEZONE || "America/Panama"
     },
     updatedAt: null,
@@ -64,21 +65,49 @@ function getDefaultConfig() {
   };
 }
 
+function clampDisplayCount(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(MAX_GALLERY_ITEMS, Math.max(1, parsed));
+}
+
 function normalizeStoredConfig(value) {
   const defaults = getDefaultConfig();
   const parsed = value && typeof value === "object" ? value : {};
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
   const settings = parsed.settings && typeof parsed.settings === "object"
     ? parsed.settings
     : {};
+  const fixedCount = items.filter((item) => item.isFeatured).length;
+
+  let displayCount;
+  if (settings.displayCount !== undefined && settings.displayCount !== null) {
+    displayCount = clampDisplayCount(
+      settings.displayCount,
+      defaults.settings.displayCount
+    );
+  } else if (settings.randomCount !== undefined && settings.randomCount !== null) {
+    const legacyRandomCount = clampDisplayCount(
+      settings.randomCount,
+      defaults.settings.displayCount
+    );
+    displayCount = settings.mode === "mixed"
+      ? Math.min(MAX_GALLERY_ITEMS, legacyRandomCount + fixedCount)
+      : legacyRandomCount;
+  } else {
+    displayCount = defaults.settings.displayCount;
+  }
 
   return {
-    version: 2,
+    version: 3,
     settings: {
-      ...defaults.settings,
-      ...settings
+      mode: settings.mode || defaults.settings.mode,
+      rotation: settings.rotation || defaults.settings.rotation,
+      displayCount,
+      timezone: settings.timezone || defaults.settings.timezone
     },
     updatedAt: parsed.updatedAt || null,
-    items: Array.isArray(parsed.items) ? parsed.items : []
+    items
   };
 }
 
@@ -202,7 +231,7 @@ async function performWrite(config) {
         description: "Configuracion privada de la galeria web de COINPSI.",
         appProperties: {
           coinpsiResource: "gallery-config",
-          coinpsiVersion: "2"
+          coinpsiVersion: "3"
         }
       },
       media: {
@@ -221,7 +250,7 @@ async function performWrite(config) {
         description: "Configuracion privada de la galeria web de COINPSI.",
         appProperties: {
           coinpsiResource: "gallery-config",
-          coinpsiVersion: "2"
+          coinpsiVersion: "3"
         }
       },
       media: {
