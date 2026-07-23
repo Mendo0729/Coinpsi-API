@@ -15,12 +15,7 @@ async function listPublicGallery(req, res) {
       status: "ok",
       count: gallery.items.length,
       sourceCount: gallery.sourceCount,
-      displayCount: gallery.settings.displayCount,
-      fixedCount: gallery.fixedCount,
-      randomFillCount: gallery.randomFillCount,
-      mode: gallery.settings.mode,
-      rotation: gallery.settings.rotation,
-      rotationKey: gallery.rotationKey,
+      mode: "manual",
       items: gallery.items
     });
   } catch (error) {
