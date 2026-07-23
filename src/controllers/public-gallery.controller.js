@@ -6,29 +6,35 @@ const {
   getOptimizedDriveImage
 } = require("../services/image-optimization.service");
 
-function listPublicGallery(req, res) {
+async function listPublicGallery(req, res) {
   try {
-    const items = getPublicGalleryItems();
+    const gallery = await getPublicGalleryItems();
+    res.set("Cache-Control", "no-store");
+
     return res.status(200).json({
       status: "ok",
-      count: items.length,
-      items
+      count: gallery.items.length,
+      sourceCount: gallery.sourceCount,
+      mode: gallery.settings.mode,
+      rotation: gallery.settings.rotation,
+      rotationKey: gallery.rotationKey,
+      items: gallery.items
     });
   } catch (error) {
     console.error("No fue posible consultar la galeria publica:", error.message);
     return res.status(500).json({
-      error: "PUBLIC_GALLERY_ERROR",
-      message: "No fue posible consultar la galeria publica."
+      error: error.code || "PUBLIC_GALLERY_ERROR",
+      message: error.message || "No fue posible consultar la galeria publica."
     });
   }
 }
 
 async function streamPublicGalleryImage(req, res) {
-  const selectedItem = getPublicGalleryItem(req.params.fileId);
+  const selectedItem = await getPublicGalleryItem(req.params.fileId);
   if (!selectedItem) {
     return res.status(404).json({
       error: "GALLERY_IMAGE_NOT_FOUND",
-      message: "La imagen solicitada no esta publicada."
+      message: "La imagen solicitada no esta habilitada en la galeria."
     });
   }
 
