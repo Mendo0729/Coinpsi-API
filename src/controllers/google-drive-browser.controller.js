@@ -1,7 +1,9 @@
 const {
-  getDriveImageContent,
   listDriveFolder
 } = require("../services/google-drive-gallery.service");
+const {
+  getOptimizedDriveImage
+} = require("../services/image-optimization.service");
 
 async function getFolderContents(req, res) {
   try {
@@ -22,18 +24,21 @@ async function getFolderContents(req, res) {
 
 async function streamAdminDriveImage(req, res) {
   try {
-    const image = await getDriveImageContent(req.params.fileId);
-    res.set("Content-Type", image.metadata.mimeType);
-    res.set("Cache-Control", "private, no-store");
-    if (image.metadata.size) res.set("Content-Length", String(image.metadata.size));
+    const image = await getOptimizedDriveImage(req.params.fileId, "thumbnail");
+    const etag = `"${image.cacheKey}-${image.variant}"`;
 
-    image.stream.on("error", (error) => {
-      console.error("Google Drive interrumpio la vista previa:", error.message);
-      if (!res.headersSent) res.status(502).end();
-      else res.destroy(error);
-    });
+    if (req.headers["if-none-match"] === etag) {
+      return res.status(304).end();
+    }
 
-    return image.stream.pipe(res);
+    res.set("Content-Type", image.mimeType);
+    res.set("Content-Length", String(image.buffer.length));
+    res.set("Cache-Control", "private, max-age=86400");
+    res.set("ETag", etag);
+    res.set("X-Coinpsi-Image-Variant", image.variant);
+    res.set("X-Coinpsi-Image-Cache", image.cacheStatus);
+
+    return res.status(200).send(image.buffer);
   } catch (error) {
     console.error("No fue posible cargar la vista previa de Google Drive:", error.message);
     return res.status(400).json({
