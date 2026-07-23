@@ -3,6 +3,8 @@ const express = require("express");
 
 const adminEventRoutes = require("./routes/admin-event.routes");
 const authRoutes = require("./routes/auth.routes");
+const googleDriveRoutes = require("./routes/google-drive.routes");
+const googleOAuthRoutes = require("./routes/google-oauth.routes");
 const publicEventRoutes = require("./routes/public-event.routes");
 const { getDatabaseHealth } = require("./services/health.service");
 
@@ -30,6 +32,8 @@ app.use(express.json());
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/events", publicEventRoutes);
 app.use("/api/v1/admin/events", adminEventRoutes);
+app.use("/api/v1/admin/google-drive", googleDriveRoutes);
+app.use("/api/v1/google", googleOAuthRoutes);
 
 app.get("/health", async (req, res) => {
   try {
