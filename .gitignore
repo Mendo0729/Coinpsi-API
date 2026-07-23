@@ -1,9 +1,9 @@
 node_modules/
+
+# Archivos de entorno: solo locales
 .env
 .env.*
-!.env.example
-!.env.development.example
-!.env.production.example
+
 .google-drive-token.json
 .gallery-selection.json
 .gallery-selection.json.tmp
