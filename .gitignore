@@ -4,6 +4,7 @@ node_modules/
 !.env.example
 !.env.development.example
 !.env.production.example
+.google-drive-token.json
 logs/
 *.log
 coverage/
