@@ -258,6 +258,7 @@ async function getDriveImageContent(fileId) {
 module.exports = {
   FOLDER_MIME_TYPE,
   IMAGE_PAGE_SIZE,
+  createDriveClient,
   getDriveImageBuffer,
   getDriveImageContent,
   getDriveImageMetadata,

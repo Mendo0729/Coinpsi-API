@@ -1,19 +1,16 @@
-const fs = require("fs");
-const path = require("path");
-
 const {
   getDriveImageMetadata
 } = require("./google-drive-gallery.service");
+const {
+  getDefaultConfig,
+  readGalleryConfig,
+  writeGalleryConfig
+} = require("./gallery-config-drive.service");
 
 const MAX_GALLERY_ITEMS = 60;
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{10,200}$/;
-
-function getSelectionPath() {
-  return path.resolve(
-    process.cwd(),
-    process.env.GALLERY_SELECTION_PATH || ".gallery-selection.json"
-  );
-}
+const ALLOWED_MODES = new Set(["manual", "random", "mixed"]);
+const ALLOWED_ROTATIONS = new Set(["visit", "daily", "weekly"]);
 
 function createValidationError(message, details = {}) {
   const error = new Error(message);
@@ -27,82 +24,208 @@ function normalizeText(value, fallback = "", maxLength = 180) {
   return normalized.slice(0, maxLength);
 }
 
-function readSelectionFile() {
-  const selectionPath = getSelectionPath();
-  if (!fs.existsSync(selectionPath)) {
-    return {
-      version: 1,
-      updatedAt: null,
-      items: []
-    };
-  }
+function normalizeSettings(inputSettings = {}) {
+  const defaults = getDefaultConfig().settings;
+  const input = inputSettings && typeof inputSettings === "object"
+    ? inputSettings
+    : {};
+  const mode = ALLOWED_MODES.has(input.mode) ? input.mode : defaults.mode;
+  const rotation = ALLOWED_ROTATIONS.has(input.rotation)
+    ? input.rotation
+    : defaults.rotation;
+  const parsedRandomCount = Number.parseInt(input.randomCount, 10);
+  const randomCount = Number.isFinite(parsedRandomCount)
+    ? Math.min(MAX_GALLERY_ITEMS, Math.max(1, parsedRandomCount))
+    : defaults.randomCount;
 
+  return {
+    mode,
+    rotation,
+    randomCount,
+    timezone: normalizeText(
+      input.timezone,
+      defaults.timezone || "America/Panama",
+      100
+    ) || "America/Panama"
+  };
+}
+
+function sortByConfiguredOrder(items) {
+  return [...items].sort(
+    (a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0)
+  );
+}
+
+function getZonedDateParts(timezone) {
   try {
-    const parsed = JSON.parse(fs.readFileSync(selectionPath, "utf8"));
-    return {
-      version: 1,
-      updatedAt: parsed.updatedAt || null,
-      items: Array.isArray(parsed.items) ? parsed.items : []
-    };
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date());
+
+    return Object.fromEntries(
+      parts
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value])
+    );
   } catch {
-    const error = new Error("El archivo local de seleccion de galeria no es valido.");
-    error.code = "GALLERY_SELECTION_INVALID";
-    throw error;
+    return getZonedDateParts("America/Panama");
   }
 }
 
-function writeSelectionFile(selection) {
-  const selectionPath = getSelectionPath();
-  const tempPath = `${selectionPath}.tmp`;
-  const directory = path.dirname(selectionPath);
+function getRotationKey(settings) {
+  if (settings.rotation === "visit") {
+    return `visit-${Date.now()}-${Math.random()}`;
+  }
 
-  fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(tempPath, JSON.stringify(selection, null, 2), {
-    encoding: "utf8",
-    mode: 0o600
-  });
-  fs.renameSync(tempPath, selectionPath);
+  const parts = getZonedDateParts(settings.timezone);
+  const dailyKey = `${parts.year}-${parts.month}-${parts.day}`;
+  if (settings.rotation === "daily") return dailyKey;
+
+  const date = new Date(Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day)
+  ));
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
+
+  return `week-${date.toISOString().slice(0, 10)}`;
 }
 
-function getAdminGallerySelection() {
-  return readSelectionFile();
+function hashString(value) {
+  let hash = 2166136261;
+  for (const character of String(value)) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
-function getPublicGalleryItems() {
-  const selection = readSelectionFile();
-
-  return selection.items
-    .filter((item) => item.published !== false)
-    .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
-    .map((item) => ({
-      id: item.fileId,
-      title: item.title,
-      description: item.description,
-      category: item.category,
-      isFeatured: Boolean(item.isFeatured),
-      imagePath: `/api/v1/gallery/images/${encodeURIComponent(item.fileId)}`
-    }));
+function createSeededRandom(seed) {
+  let state = seed >>> 0;
+  return function seededRandom() {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function getPublicGalleryItem(fileId) {
+function shuffleItems(items, seedValue) {
+  const shuffled = [...items];
+  const random = createSeededRandom(hashString(seedValue));
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function selectPublicItems(config) {
+  const settings = normalizeSettings(config.settings);
+  const published = sortByConfiguredOrder(
+    config.items.filter((item) => item.published !== false)
+  );
+  const rotationKey = getRotationKey(settings);
+  const seed = [
+    rotationKey,
+    config.updatedAt || "initial",
+    settings.mode,
+    settings.randomCount
+  ].join("|");
+
+  if (settings.mode === "manual") {
+    return { items: published, settings, rotationKey };
+  }
+
+  if (settings.mode === "random") {
+    return {
+      items: shuffleItems(published, seed).slice(0, settings.randomCount),
+      settings,
+      rotationKey
+    };
+  }
+
+  const featured = published.filter((item) => item.isFeatured);
+  const candidates = published.filter((item) => !item.isFeatured);
+  const randomItems = shuffleItems(candidates, seed).slice(0, settings.randomCount);
+
+  return {
+    items: [...featured, ...randomItems],
+    settings,
+    rotationKey
+  };
+}
+
+function mapPublicItem(item) {
+  return {
+    id: item.fileId,
+    title: item.title,
+    description: item.description,
+    category: item.category,
+    isFeatured: Boolean(item.isFeatured),
+    imagePath: `/api/v1/gallery/images/${encodeURIComponent(item.fileId)}`
+  };
+}
+
+async function getAdminGallerySelection() {
+  const record = await readGalleryConfig();
+  return {
+    ...record.config,
+    settings: normalizeSettings(record.config.settings),
+    storage: record.storage
+  };
+}
+
+async function getPublicGalleryItems() {
+  const record = await readGalleryConfig();
+  const selected = selectPublicItems(record.config);
+
+  return {
+    items: selected.items.map(mapPublicItem),
+    settings: selected.settings,
+    rotationKey: selected.rotationKey,
+    sourceCount: record.config.items.filter((item) => item.published !== false).length
+  };
+}
+
+async function getPublicGalleryItem(fileId) {
   const normalizedId = String(fileId || "").trim();
-  return readSelectionFile().items.find(
+  const record = await readGalleryConfig();
+
+  return record.config.items.find(
     (item) => item.fileId === normalizedId && item.published !== false
   ) || null;
 }
 
-async function replaceGallerySelection(inputItems) {
+async function replaceGallerySelection(inputItems, inputSettings = null) {
   if (!Array.isArray(inputItems)) {
     throw createValidationError("items debe ser una lista.", { field: "items" });
   }
 
   if (inputItems.length > MAX_GALLERY_ITEMS) {
     throw createValidationError(
-      `La galeria de prueba permite un maximo de ${MAX_GALLERY_ITEMS} imagenes.`,
+      `La galeria permite un maximo de ${MAX_GALLERY_ITEMS} imagenes habilitadas.`,
       { field: "items" }
     );
   }
 
+  const currentRecord = await readGalleryConfig();
+  const currentItems = new Map(
+    currentRecord.config.items.map((item) => [item.fileId, item])
+  );
+  const hasExplicitSettings = inputSettings
+    && typeof inputSettings === "object"
+    && Object.keys(inputSettings).length > 0;
+  const settings = normalizeSettings(
+    hasExplicitSettings ? inputSettings : currentRecord.config.settings
+  );
   const uniqueIds = new Set();
   const normalizedItems = [];
 
@@ -119,7 +242,14 @@ async function replaceGallerySelection(inputItems) {
     if (uniqueIds.has(fileId)) continue;
     uniqueIds.add(fileId);
 
-    const metadata = await getDriveImageMetadata(fileId);
+    const currentItem = currentItems.get(fileId) || null;
+    const metadata = currentItem?.mimeType
+      ? {
+          name: currentItem.name,
+          mimeType: currentItem.mimeType,
+          size: currentItem.size
+        }
+      : await getDriveImageMetadata(fileId);
     const baseTitle = String(metadata.name || "Imagen COINPSI")
       .replace(/\.[a-z0-9]{2,8}$/i, "")
       .replace(/[_-]+/g, " ")
@@ -130,26 +260,50 @@ async function replaceGallerySelection(inputItems) {
       name: metadata.name,
       mimeType: metadata.mimeType,
       size: metadata.size || null,
-      folderId: normalizeText(input.folderId, "", 200) || null,
-      folderName: normalizeText(input.folderName, "", 180) || null,
-      title: normalizeText(input.title, baseTitle || "Imagen COINPSI", 180),
-      description: normalizeText(input.description, "Actividad realizada por COINPSI.", 500),
-      category: normalizeText(input.category, input.folderName || "Galeria", 80) || "Galeria",
+      folderId: normalizeText(
+        input.folderId,
+        currentItem?.folderId || "",
+        200
+      ) || null,
+      folderName: normalizeText(
+        input.folderName,
+        currentItem?.folderName || "",
+        180
+      ) || null,
+      title: normalizeText(
+        input.title,
+        currentItem?.title || baseTitle || "Imagen COINPSI",
+        180
+      ),
+      description: normalizeText(
+        input.description,
+        currentItem?.description || "Actividad realizada por COINPSI.",
+        500
+      ),
+      category: normalizeText(
+        input.category,
+        currentItem?.category || input.folderName || "Galeria",
+        80
+      ) || "Galeria",
       isFeatured: Boolean(input.isFeatured),
       published: true,
       sortOrder: normalizedItems.length,
-      selectedAt: new Date().toISOString()
+      selectedAt: input.selectedAt || currentItem?.selectedAt || new Date().toISOString()
     });
   }
 
-  const selection = {
-    version: 1,
+  const config = {
+    version: 2,
+    settings,
     updatedAt: new Date().toISOString(),
     items: normalizedItems
   };
+  const record = await writeGalleryConfig(config);
 
-  writeSelectionFile(selection);
-  return selection;
+  return {
+    ...record.config,
+    storage: record.storage
+  };
 }
 
 module.exports = {
