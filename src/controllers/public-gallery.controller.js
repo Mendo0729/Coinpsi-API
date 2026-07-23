@@ -30,15 +30,15 @@ async function listPublicGallery(req, res) {
 }
 
 async function streamPublicGalleryImage(req, res) {
-  const selectedItem = await getPublicGalleryItem(req.params.fileId);
-  if (!selectedItem) {
-    return res.status(404).json({
-      error: "GALLERY_IMAGE_NOT_FOUND",
-      message: "La imagen solicitada no esta habilitada en la galeria."
-    });
-  }
-
   try {
+    const selectedItem = await getPublicGalleryItem(req.params.fileId);
+    if (!selectedItem) {
+      return res.status(404).json({
+        error: "GALLERY_IMAGE_NOT_FOUND",
+        message: "La imagen solicitada no esta habilitada en la galeria."
+      });
+    }
+
     const image = await getOptimizedDriveImage(selectedItem.fileId, "medium");
     const etag = `"${image.cacheKey}-${image.variant}"`;
 
