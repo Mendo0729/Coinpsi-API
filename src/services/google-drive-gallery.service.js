@@ -65,14 +65,18 @@ function readCredentials() {
   return tokens;
 }
 
-function createDriveClient() {
+function createOAuthClient() {
   const oauthClient = new google.auth.OAuth2(
     getEnv("GOOGLE_CLIENT_ID"),
     getEnv("GOOGLE_CLIENT_SECRET"),
     getEnv("GOOGLE_REDIRECT_URI")
   );
   oauthClient.setCredentials(readCredentials());
-  return google.drive({ version: "v3", auth: oauthClient });
+  return oauthClient;
+}
+
+function createDriveClient() {
+  return google.drive({ version: "v3", auth: createOAuthClient() });
 }
 
 function escapeQuery(value) {
@@ -132,7 +136,7 @@ async function listChildImages(drive, folderId, pageToken) {
     pageSize: IMAGE_PAGE_SIZE,
     pageToken: normalizePageToken(pageToken),
     fields:
-      "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,parents,webViewLink,imageMediaMetadata(width,height))"
+      "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,parents,webViewLink,thumbnailLink,imageMediaMetadata(width,height))"
   });
 
   return {
@@ -179,7 +183,7 @@ async function getDriveImageMetadata(fileId) {
   const drive = createDriveClient();
   const response = await drive.files.get({
     fileId: normalizedFileId,
-    fields: "id,name,mimeType,size,createdTime,modifiedTime,parents,trashed,imageMediaMetadata(width,height)"
+    fields: "id,name,mimeType,size,createdTime,modifiedTime,parents,trashed,thumbnailLink,md5Checksum,imageMediaMetadata(width,height)"
   });
 
   if (response.data.trashed || !String(response.data.mimeType || "").startsWith("image/")) {
@@ -187,6 +191,49 @@ async function getDriveImageMetadata(fileId) {
   }
 
   return response.data;
+}
+
+async function getDriveImageBuffer(fileOrMetadata) {
+  const metadata = typeof fileOrMetadata === "string"
+    ? await getDriveImageMetadata(fileOrMetadata)
+    : fileOrMetadata;
+  const drive = createDriveClient();
+  const response = await drive.files.get(
+    {
+      fileId: metadata.id,
+      alt: "media"
+    },
+    {
+      responseType: "arraybuffer"
+    }
+  );
+
+  return {
+    metadata,
+    buffer: Buffer.from(response.data),
+    mimeType: metadata.mimeType
+  };
+}
+
+async function getDriveThumbnailBuffer(fileOrMetadata) {
+  const metadata = typeof fileOrMetadata === "string"
+    ? await getDriveImageMetadata(fileOrMetadata)
+    : fileOrMetadata;
+
+  if (!metadata.thumbnailLink) return null;
+
+  const oauthClient = createOAuthClient();
+  const response = await oauthClient.request({
+    url: metadata.thumbnailLink,
+    method: "GET",
+    responseType: "arraybuffer"
+  });
+
+  return {
+    metadata,
+    buffer: Buffer.from(response.data),
+    mimeType: response.headers?.["content-type"] || "image/jpeg"
+  };
 }
 
 async function getDriveImageContent(fileId) {
@@ -211,7 +258,9 @@ async function getDriveImageContent(fileId) {
 module.exports = {
   FOLDER_MIME_TYPE,
   IMAGE_PAGE_SIZE,
+  getDriveImageBuffer,
   getDriveImageContent,
   getDriveImageMetadata,
+  getDriveThumbnailBuffer,
   listDriveFolder
 };
