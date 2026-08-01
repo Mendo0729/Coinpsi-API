@@ -180,10 +180,13 @@ async function insertKnowledgePost(post) {
           $5,
           $6,
           $7,
-          $8,
+          $8::VARCHAR(20),
           $9,
           $10,
-          CASE WHEN $8 = 'published' THEN NOW() ELSE NULL END
+          CASE
+            WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) THEN NOW()
+            ELSE NULL
+          END
         )
         RETURNING *
       )
@@ -225,13 +228,13 @@ async function updateKnowledgePostById(id, post) {
           cover_image_url = $5,
           author_name = $6,
           category_id = $7,
-          status = $8,
+          status = $8::VARCHAR(20),
           is_featured = $9,
           updated_by = $10,
           published_at = CASE
-            WHEN $8 = 'published' AND published_at IS NULL THEN NOW()
-            WHEN $8 = 'published' THEN published_at
-            WHEN $8 = 'draft' THEN NULL
+            WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) AND published_at IS NULL THEN NOW()
+            WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) THEN published_at
+            WHEN $8::VARCHAR(20) = 'draft'::VARCHAR(20) THEN NULL
             ELSE published_at
           END,
           updated_at = NOW()
