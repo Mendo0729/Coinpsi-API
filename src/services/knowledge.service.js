@@ -5,11 +5,13 @@ const {
   listAdminKnowledgePosts,
   listKnowledgeCategories,
   listPublishedKnowledgePosts,
+  replaceKnowledgeLandingSelection,
   updateKnowledgePostById
 } = require("../repositories/knowledge.repository");
 
 const CREATE_STATUSES = new Set(["draft", "published"]);
 const UPDATE_STATUSES = new Set(["draft", "published", "archived"]);
+const MAX_LANDING_POSTS = 10;
 
 function createValidationError(message, details = {}) {
   const error = new Error(message);
@@ -117,9 +119,35 @@ async function normalizePostPayload(payload = {}, { allowArchived = false } = {}
     coverImageUrl: normalizeOptionalText(payload.coverImageUrl, "coverImageUrl", 500),
     authorName: normalizeRequiredText(payload.authorName, "authorName", 150),
     categoryId,
-    status: normalizeStatus(payload.status, { allowArchived }),
-    isFeatured: payload.isFeatured === true
+    status: normalizeStatus(payload.status, { allowArchived })
   };
+}
+
+function normalizeLandingSelection(input) {
+  if (!Array.isArray(input)) {
+    throw createValidationError("postIds debe ser una lista.", {
+      field: "postIds"
+    });
+  }
+
+  if (input.length > MAX_LANDING_POSTS) {
+    throw createValidationError(
+      `Espacio del Saber permite un máximo de ${MAX_LANDING_POSTS} publicaciones visibles.`,
+      { field: "postIds", maxItems: MAX_LANDING_POSTS }
+    );
+  }
+
+  const uniqueIds = [];
+  const seen = new Set();
+
+  input.forEach((value, index) => {
+    const id = normalizeId(value, `postIds[${index}]`);
+    if (seen.has(id)) return;
+    seen.add(id);
+    uniqueIds.push(id);
+  });
+
+  return uniqueIds;
 }
 
 async function getKnowledgeCategories() {
@@ -157,6 +185,13 @@ async function updateAdminKnowledgePost(id, payload, adminId) {
   return post;
 }
 
+async function updateKnowledgeLandingSelection(postIds, adminId) {
+  return replaceKnowledgeLandingSelection(
+    normalizeLandingSelection(postIds),
+    normalizeId(adminId, "adminId")
+  );
+}
+
 async function removeAdminKnowledgePost(id) {
   const deletedId = await deleteKnowledgePostById(normalizeId(id));
 
@@ -170,5 +205,6 @@ module.exports = {
   getKnowledgeCategories,
   getPublishedKnowledgePosts,
   removeAdminKnowledgePost,
-  updateAdminKnowledgePost
+  updateAdminKnowledgePost,
+  updateKnowledgeLandingSelection
 };

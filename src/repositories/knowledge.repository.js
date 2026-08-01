@@ -11,6 +11,8 @@ const ADMIN_POST_FIELDS = `
   kp.category_id,
   kp.status,
   kp.is_featured,
+  kp.show_on_landing,
+  kp.display_order,
   kp.created_by,
   kp.updated_by,
   kp.published_at,
@@ -30,8 +32,8 @@ const PUBLIC_POST_FIELDS = `
   kp.content,
   kp.cover_image_url,
   kp.author_name,
-  kp.is_featured,
   kp.published_at,
+  kp.display_order,
   kc.id AS category_id,
   kc.name AS category_name,
   kc.slug AS category_slug
@@ -63,6 +65,8 @@ function mapAdminPost(row) {
     categorySlug: row.category_slug,
     status: row.status,
     isFeatured: row.is_featured,
+    showOnLanding: row.show_on_landing,
+    displayOrder: row.display_order,
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     updatedBy: row.updated_by,
@@ -82,8 +86,8 @@ function mapPublicPost(row) {
     content: row.content,
     coverImageUrl: row.cover_image_url,
     authorName: row.author_name,
-    isFeatured: row.is_featured,
     publishedAt: row.published_at,
+    displayOrder: row.display_order,
     category: {
       id: row.category_id,
       name: row.category_name,
@@ -135,7 +139,11 @@ async function listAdminKnowledgePosts() {
       ON creator.id = kp.created_by
     LEFT JOIN coinpsi.admin_users updater
       ON updater.id = kp.updated_by
-    ORDER BY kp.created_at DESC, kp.id DESC
+    ORDER BY
+      kp.show_on_landing DESC,
+      kp.display_order ASC NULLS LAST,
+      kp.created_at DESC,
+      kp.id DESC
   `);
 
   return result.rows.map(mapAdminPost);
@@ -148,8 +156,10 @@ async function listPublishedKnowledgePosts() {
     JOIN coinpsi.knowledge_categories kc
       ON kc.id = kp.category_id
     WHERE kp.status = 'published'
+      AND kp.show_on_landing = TRUE
       AND kc.is_active = TRUE
-    ORDER BY kp.is_featured DESC, kp.published_at DESC, kp.id DESC
+    ORDER BY kp.display_order ASC NULLS LAST, kp.published_at DESC, kp.id DESC
+    LIMIT 10
   `);
 
   return result.rows.map(mapPublicPost);
@@ -169,6 +179,8 @@ async function insertKnowledgePost(post) {
           category_id,
           status,
           is_featured,
+          show_on_landing,
+          display_order,
           created_by,
           published_at
         )
@@ -181,8 +193,10 @@ async function insertKnowledgePost(post) {
           $6,
           $7,
           $8::VARCHAR(20),
+          FALSE,
+          FALSE,
+          NULL,
           $9,
-          $10,
           CASE
             WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) THEN NOW()
             ELSE NULL
@@ -208,7 +222,6 @@ async function insertKnowledgePost(post) {
       post.authorName,
       post.categoryId,
       post.status,
-      post.isFeatured,
       post.createdBy
     ]
   );
@@ -229,8 +242,16 @@ async function updateKnowledgePostById(id, post) {
           author_name = $6,
           category_id = $7,
           status = $8::VARCHAR(20),
-          is_featured = $9,
-          updated_by = $10,
+          is_featured = FALSE,
+          show_on_landing = CASE
+            WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) THEN show_on_landing
+            ELSE FALSE
+          END,
+          display_order = CASE
+            WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) THEN display_order
+            ELSE NULL
+          END,
+          updated_by = $9,
           published_at = CASE
             WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) AND published_at IS NULL THEN NOW()
             WHEN $8::VARCHAR(20) = 'published'::VARCHAR(20) THEN published_at
@@ -259,12 +280,83 @@ async function updateKnowledgePostById(id, post) {
       post.authorName,
       post.categoryId,
       post.status,
-      post.isFeatured,
       post.updatedBy
     ]
   );
 
   return result.rows[0] ? mapAdminPost(result.rows[0]) : null;
+}
+
+async function replaceKnowledgeLandingSelection(postIds, adminId) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    if (postIds.length) {
+      const locked = await client.query(
+        `
+          SELECT id, status
+          FROM coinpsi.knowledge_posts
+          WHERE id = ANY($1::BIGINT[])
+          FOR UPDATE
+        `,
+        [postIds]
+      );
+
+      if (locked.rowCount !== postIds.length) {
+        const error = new Error("Una de las publicaciones seleccionadas no existe.");
+        error.code = "VALIDATION_ERROR";
+        error.details = { field: "postIds" };
+        throw error;
+      }
+
+      const unpublished = locked.rows.find((row) => row.status !== "published");
+      if (unpublished) {
+        const error = new Error("Solo las publicaciones con estado Publicado pueden mostrarse en la landing.");
+        error.code = "VALIDATION_ERROR";
+        error.details = { field: "postIds", postId: unpublished.id };
+        throw error;
+      }
+    }
+
+    await client.query(
+      `
+        UPDATE coinpsi.knowledge_posts
+        SET
+          show_on_landing = FALSE,
+          display_order = NULL,
+          updated_by = $1,
+          updated_at = NOW()
+        WHERE show_on_landing = TRUE
+      `,
+      [adminId]
+    );
+
+    for (let index = 0; index < postIds.length; index += 1) {
+      await client.query(
+        `
+          UPDATE coinpsi.knowledge_posts
+          SET
+            show_on_landing = TRUE,
+            display_order = $2,
+            updated_by = $3,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [postIds[index], index + 1, adminId]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return listAdminKnowledgePosts();
 }
 
 async function deleteKnowledgePostById(id) {
@@ -287,5 +379,6 @@ module.exports = {
   listAdminKnowledgePosts,
   listKnowledgeCategories,
   listPublishedKnowledgePosts,
+  replaceKnowledgeLandingSelection,
   updateKnowledgePostById
 };

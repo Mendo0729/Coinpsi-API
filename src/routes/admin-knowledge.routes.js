@@ -5,6 +5,7 @@ const {
   deletePost,
   listCategories,
   listPosts,
+  saveLandingSelection,
   updatePost
 } = require("../controllers/admin-knowledge.controller");
 const requireAuth = require("../middleware/require-auth");
@@ -15,6 +16,7 @@ router.use(requireAuth);
 router.get("/categories", listCategories);
 router.get("/posts", listPosts);
 router.post("/posts", createPost);
+router.post("/selection", saveLandingSelection);
 router.patch("/posts/:id", updatePost);
 router.delete("/posts/:id", deletePost);
 
