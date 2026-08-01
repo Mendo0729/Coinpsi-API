@@ -3,7 +3,8 @@ const {
   getAdminKnowledgePosts,
   getKnowledgeCategories,
   removeAdminKnowledgePost,
-  updateAdminKnowledgePost
+  updateAdminKnowledgePost,
+  updateKnowledgeLandingSelection
 } = require("../services/knowledge.service");
 
 function sendKnownError(res, error) {
@@ -61,6 +62,30 @@ async function listPosts(req, res) {
     return res.status(500).json({
       error: "INTERNAL_ERROR",
       message: "No fue posible consultar las publicaciones."
+    });
+  }
+}
+
+async function saveLandingSelection(req, res) {
+  try {
+    const posts = await updateKnowledgeLandingSelection(
+      req.body?.postIds,
+      req.auth.userId
+    );
+
+    return res.status(200).json({
+      status: "ok",
+      selectedCount: posts.filter((post) => post.showOnLanding).length,
+      posts
+    });
+  } catch (error) {
+    if (sendKnownError(res, error)) return;
+
+    console.error("No fue posible guardar la selección de Espacio del Saber:", error.message);
+
+    return res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "No fue posible guardar la selección para la landing."
     });
   }
 }
@@ -134,5 +159,6 @@ module.exports = {
   deletePost,
   listCategories,
   listPosts,
+  saveLandingSelection,
   updatePost
 };
