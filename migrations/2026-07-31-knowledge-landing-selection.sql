@@ -54,7 +54,12 @@ SET
 FROM ranked
 WHERE kp.id = ranked.id
   AND ranked.position <= 10
-  AND kp.show_on_landing = FALSE;
+  AND kp.show_on_landing = FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM coinpsi.knowledge_posts current_selection
+    WHERE current_selection.show_on_landing = TRUE
+  );
 
 GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLE coinpsi.knowledge_posts
