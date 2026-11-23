@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const { Pool } = require("pg");
+const { normalizeConnectionString } = require("./db-url");
 
 function getSslOptions() {
   if (process.env.DATABASE_SSL !== "true") return false;
@@ -10,7 +11,7 @@ function getSslOptions() {
 }
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: normalizeConnectionString(process.env.DATABASE_URL),
   ssl: getSslOptions(),
   max: 10,
   connectionTimeoutMillis: 10000,
