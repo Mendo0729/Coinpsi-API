@@ -5,7 +5,7 @@ const readline = require("node:readline/promises");
 const { stdin, stdout } = require("node:process");
 const pool = require("../src/config/database");
 
-const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 12;
 const BCRYPT_ROUNDS = 12;
 
 function normalizeEmail(value) {

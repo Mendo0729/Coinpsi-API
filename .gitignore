@@ -12,3 +12,8 @@ logs/
 *.log
 coverage/
 .DS_Store
+
+# Never commit environment exports or private certificates
+Coinpsi-API.env
+*.pem
+*.key

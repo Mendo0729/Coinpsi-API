@@ -1,0 +1,32 @@
+name: API security checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify JavaScript syntax
+        run: find src tests scripts -name '*.js' -print0 | xargs -0 -n 1 node --check
+      - name: Run tests
+        run: npm test
+      - name: Full dependency audit
+        run: npm audit --omit=dev

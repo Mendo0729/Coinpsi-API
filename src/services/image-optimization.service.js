@@ -34,6 +34,8 @@ const MAX_CONCURRENT_JOBS = normalizeInteger(
   1,
   8
 );
+const MAX_PENDING_IMAGE_JOBS = normalizeInteger(process.env.IMAGE_MAX_PENDING_JOBS, 30, 1, 100);
+const MAX_IMAGE_BYTES = normalizeInteger(process.env.IMAGE_MAX_BYTES, 15 * 1024 * 1024, 1024 * 1024, 40 * 1024 * 1024);
 const SHARP_CONCURRENCY = normalizeInteger(
   process.env.SHARP_CONCURRENCY,
   2,
@@ -99,6 +101,11 @@ async function writeCachedBuffer(cachePath, buffer) {
 }
 
 function runWithLimit(task) {
+  if (waitingJobs.length >= MAX_PENDING_IMAGE_JOBS) {
+    const error = new Error("La cola de imágenes está saturada.");
+    error.code = "IMAGE_QUEUE_FULL";
+    return Promise.reject(error);
+  }
   return new Promise((resolve, reject) => {
     waitingJobs.push({ task, resolve, reject });
     drainQueue();
@@ -176,7 +183,17 @@ async function buildOptimizedImage(metadata, variantName, cacheKey, cachePath) {
     };
   }
 
+  if (Number(metadata.size || 0) > MAX_IMAGE_BYTES) {
+    const error = new Error("La imagen supera el tamaño máximo permitido.");
+    error.code = "IMAGE_TOO_LARGE";
+    throw error;
+  }
   const source = await getSourceBuffer(metadata, variantName);
+  if (source.buffer.length > MAX_IMAGE_BYTES) {
+    const error = new Error("La imagen supera el tamaño máximo permitido.");
+    error.code = "IMAGE_TOO_LARGE";
+    throw error;
+  }
 
   try {
     const optimized = await transformToWebp(source.buffer, variantName);
@@ -195,10 +212,12 @@ async function buildOptimizedImage(metadata, variantName, cacheKey, cachePath) {
       `No fue posible optimizar la imagen ${metadata.id}; se entregara el archivo original: ${error.message}`
     );
 
+    const safeMimeType = source.mimeType || metadata.mimeType;
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(safeMimeType)) throw error;
     return {
       metadata,
       buffer: source.buffer,
-      mimeType: source.mimeType || metadata.mimeType,
+      mimeType: safeMimeType,
       size: source.buffer.length,
       cacheKey,
       cacheStatus: "BYPASS",

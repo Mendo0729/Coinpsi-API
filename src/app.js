@@ -1,5 +1,7 @@
 const cors = require("cors");
 const express = require("express");
+const helmet = require("helmet");
+const { generalLimiter } = require("./middleware/rate-limit");
 
 const adminEventRoutes = require("./routes/admin-event.routes");
 const adminGalleryRoutes = require("./routes/admin-gallery.routes");
@@ -14,8 +16,13 @@ const { getDatabaseHealth } = require("./services/health.service");
 
 const app = express();
 
-const adminOrigin = process.env.ADMIN_ORIGIN || "http://localhost:3001";
-const landingOrigin = process.env.LANDING_ORIGIN || "http://localhost:3000";
+// Render uses one trusted reverse proxy.
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+app.use(helmet());
+
+const adminOrigin = (process.env.ADMIN_ORIGIN || "http://localhost:3001").replace(/\/$/, "");
+const landingOrigin = (process.env.LANDING_ORIGIN || "http://localhost:3000").replace(/\/$/, "");
 const allowedOrigins = new Set([adminOrigin, landingOrigin]);
 
 app.use(
@@ -32,6 +39,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
+app.use(generalLimiter);
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/events", publicEventRoutes);
@@ -69,6 +77,21 @@ app.get("/health", async (req, res) => {
       }
     });
   }
+});
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error.message === "Origen no permitido por CORS.") {
+    return res.status(403).json({ error: "ORIGIN_NOT_ALLOWED", message: "Origen no permitido." });
+  }
+  if (error.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "INVALID_JSON", message: "El cuerpo JSON no es válido." });
+  }
+  if (error.type === "entity.too.large") {
+    return res.status(413).json({ error: "PAYLOAD_TOO_LARGE", message: "Solicitud demasiado grande." });
+  }
+  console.error("Error no controlado de API:", error.message);
+  return res.status(500).json({ error: "INTERNAL_ERROR", message: "Error interno del servidor." });
 });
 
 module.exports = app;
