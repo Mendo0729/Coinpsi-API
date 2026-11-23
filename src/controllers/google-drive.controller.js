@@ -1,3 +1,5 @@
+const crypto = require("node:crypto");
+
 const {
   createAuthorizationUrl,
   exchangeAuthorizationCode,
@@ -14,7 +16,7 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function renderOAuthResult({ success, message }) {
+function renderOAuthResult({ success, message, nonce }) {
   const adminOrigin = process.env.ADMIN_ORIGIN || "http://localhost:3001";
   const title = success ? "Google Drive conectado" : "No fue posible conectar Google Drive";
   const statusClass = success ? "success" : "error";
@@ -45,7 +47,7 @@ function renderOAuthResult({ success, message }) {
     <p>${safeMessage}</p>
     <a href="${escapeHtml(adminOrigin)}/galeria">Volver al panel</a>
   </main>
-  <script>
+  <script nonce="${nonce}">
     if (window.opener) {
       window.opener.postMessage(
         { type: ${JSON.stringify(success ? "coinpsi-google-drive-connected" : "coinpsi-google-drive-error")} },
@@ -56,6 +58,20 @@ function renderOAuthResult({ success, message }) {
   </script>
 </body>
 </html>`;
+}
+
+function sendOAuthPage(res, statusCode, data) {
+  const nonce = crypto.randomBytes(18).toString("base64");
+  res.set("Content-Security-Policy", [
+    "default-src 'none'",
+    `script-src 'nonce-${nonce}'`,
+    "style-src 'unsafe-inline'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'"
+  ].join("; "));
+  return res.status(statusCode).set("Cache-Control", "no-store").type("html")
+    .send(renderOAuthResult({ ...data, nonce }));
 }
 
 function getAuthorizationUrl(req, res) {
@@ -78,53 +94,21 @@ async function handleOAuthCallback(req, res) {
   const { code, state, error: oauthError } = req.query;
 
   if (oauthError) {
-    return res
-      .status(400)
-      .type("html")
-      .send(
-        renderOAuthResult({
-          success: false,
-          message: `Google rechazo la autorizacion: ${oauthError}`
-        })
-      );
+    return sendOAuthPage(res, 400, { success: false, message: `Google rechazo la autorizacion: ${oauthError}` });
   }
 
   if (!code || !state) {
-    return res
-      .status(400)
-      .type("html")
-      .send(
-        renderOAuthResult({
-          success: false,
-          message: "La respuesta de Google no incluyo los datos requeridos."
-        })
-      );
+    return sendOAuthPage(res, 400, { success: false, message: "La respuesta de Google no incluyo los datos requeridos." });
   }
 
   try {
     await exchangeAuthorizationCode(code, state);
 
-    return res
-      .status(200)
-      .type("html")
-      .send(
-        renderOAuthResult({
-          success: true,
-          message: "La cuenta fue autorizada. Ya puedes regresar al panel y ejecutar la prueba."
-        })
-      );
+    return sendOAuthPage(res, 200, { success: true, message: "La cuenta fue autorizada. Ya puedes regresar al panel y ejecutar la prueba." });
   } catch (error) {
     console.error("No fue posible completar OAuth de Google Drive:", error.message);
 
-    return res
-      .status(400)
-      .type("html")
-      .send(
-        renderOAuthResult({
-          success: false,
-          message: error.message
-        })
-      );
+    return sendOAuthPage(res, 400, { success: false, message: error.message });
   }
 }
 

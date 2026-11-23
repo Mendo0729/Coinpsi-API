@@ -84,7 +84,14 @@ function saveTokens(tokens) {
     throw error;
   }
 
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV === "production") {
+    const storedRefreshToken = String(process.env.GOOGLE_REFRESH_TOKEN || "").trim();
+    if (!storedRefreshToken || storedRefreshToken !== merged.refresh_token) {
+      const error = new Error("Se requiere actualizar GOOGLE_REFRESH_TOKEN en Render antes de confirmar la conexión.");
+      error.code = "GOOGLE_DRIVE_TOKEN_PERSISTENCE_REQUIRED";
+      throw error;
+    }
+  } else {
     fs.writeFileSync(getTokenPath(), JSON.stringify(merged, null, 2), {
       encoding: "utf8",
       mode: 0o600
@@ -106,6 +113,11 @@ function createAuthorizationUrl(userId) {
   const state = crypto.randomBytes(32).toString("hex");
 
   cleanupExpiredStates();
+  if (pendingStates.size >= 128) {
+    const error = new Error("Hay demasiadas autorizaciones pendientes. Intente más tarde.");
+    error.code = "GOOGLE_DRIVE_OAUTH_BUSY";
+    throw error;
+  }
   pendingStates.set(state, {
     userId: String(userId),
     expiresAt: Date.now() + STATE_TTL_MS
