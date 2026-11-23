@@ -40,6 +40,16 @@ npm start
 - En producción, para que una nueva autorización de Google Drive persista se requiere actualizar `GOOGLE_REFRESH_TOKEN` en Render; no se informa como persistida si solamente quedó en memoria. En desarrollo se mantiene un archivo local ignorado por Git.
 - Los estados OAuth son en memoria; para varias instancias usar almacenamiento compartido.
 
+## Formulario de contacto (Resend)
+
+La ruta pública `POST /api/v1/contact` recibe `fullName`, `email`, `phone`, `serviceType`, `message` y el opcional `submissionId` (UUID v4 para idempotencia). Un campo oculto `website` funciona como honeypot.
+
+**Antes de activar:** crear una API Key de Resend de solo envío para el dominio verificado `coinpsi.org`. Añadir `RESEND_API_KEY` al entorno del backend en Render; opcionalmente `RESEND_FROM_EMAIL=notificaciones@coinpsi.org` y `CONTACT_TO_EMAIL=info@coinpsi.org`. Nunca publicar la clave en frontend, Git o capturas.
+
+El endpoint valida tamaño y formato de datos, exige servicio conocido, limita 5 solicitudes por IP en 15 minutos, incorpora HTML escapado y usa `Idempotency-Key` de Resend (24 horas). En caso de error, devuelve un mensaje genérico y **no confirma falsamente el envío**. No persiste datos del visitante en el navegador ni en PostgreSQL: esta primera versión únicamente los remite al correo institucional para minimizar su retención. La recepción en Spacemail no necesita cambios.
+
+Una respuesta `200` indica que Resend aceptó la solicitud, **no confirma la entrega final al buzón**; revisar el estado del mensaje en Resend y Spacemail si es necesario.
+
 ## Pendiente de fases adicionales
 
 - Integración de formulario y Resend con validación, persistencia, anti-spam y reintentos.

@@ -7,6 +7,7 @@ const adminEventRoutes = require("./routes/admin-event.routes");
 const adminGalleryRoutes = require("./routes/admin-gallery.routes");
 const adminKnowledgeRoutes = require("./routes/admin-knowledge.routes");
 const authRoutes = require("./routes/auth.routes");
+const contactRoutes = require("./routes/contact.routes");
 const googleDriveRoutes = require("./routes/google-drive.routes");
 const googleOAuthRoutes = require("./routes/google-oauth.routes");
 const publicEventRoutes = require("./routes/public-event.routes");
@@ -23,7 +24,7 @@ app.use(helmet());
 
 const adminOrigin = (process.env.ADMIN_ORIGIN || "http://localhost:3001").replace(/\/$/, "");
 const landingOrigin = (process.env.LANDING_ORIGIN || "http://localhost:3000").replace(/\/$/, "");
-const allowedOrigins = new Set([adminOrigin, landingOrigin]);
+const allowedOrigins = new Set([adminOrigin, landingOrigin, "https://www.coinpsi.org"]);
 
 app.use(
   cors({
@@ -42,6 +43,7 @@ app.use(
 app.use(generalLimiter);
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/contact", contactRoutes);
 app.use("/api/v1/events", publicEventRoutes);
 app.use("/api/v1/gallery", publicGalleryRoutes);
 app.use("/api/v1/knowledge", publicKnowledgeRoutes);
