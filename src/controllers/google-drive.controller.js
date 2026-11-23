@@ -108,7 +108,7 @@ async function handleOAuthCallback(req, res) {
   } catch (error) {
     console.error("No fue posible completar OAuth de Google Drive:", error.message);
 
-    return sendOAuthPage(res, 400, { success: false, message: error.message });
+    return sendOAuthPage(res, 400, { success: false, message: "No fue posible completar la conexión con Google Drive. Consulte los registros del servidor." });
   }
 }
 

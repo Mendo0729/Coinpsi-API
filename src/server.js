@@ -7,6 +7,9 @@ const envFile = process.env.ENV_FILE || `.env.${environment}`;
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 dotenv.config();
 
+const { assertProductionSecurity } = require("./config/security");
+assertProductionSecurity();
+
 const app = require("./app");
 const { getDatabaseHealth } = require("./services/health.service");
 

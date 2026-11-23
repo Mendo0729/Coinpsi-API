@@ -12,6 +12,7 @@ La rama original expuso el archivo `Coinpsi-API.env` en un repositorio público.
 4. Eliminar el archivo del árbol Git **no lo elimina del historial ni de clones**. Coordinar saneamiento histórico posteriormente y nunca volver a publicar secretos.
 5. Configurar `DATABASE_SSL=true` y suministrar la CA de Aiven mediante `DATABASE_CA_CERT_PATH` o `DATABASE_CA_CERT`.
 6. No compartir secretos en issues, PR, archivos de ejemplo o capturas.
+7. El arranque en producción ahora rechaza `DATABASE_SSL` deshabilitado y `JWT_SECRET` menor de 32 bytes; configurar Render **antes** de desplegar.
 
 ## Desarrollo
 

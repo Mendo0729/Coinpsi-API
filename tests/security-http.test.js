@@ -46,3 +46,29 @@ test("invalid JSON returns HTTP 400", async () => {
     assert.equal((await response.json()).error, "INVALID_JSON");
   });
 });
+
+test("OAuth callback uses a nonce-restricted CSP and no-store", async () => {
+  await withServer(async (url) => {
+    const response = await fetch(url + "/api/v1/google/oauth/callback");
+    assert.equal(response.status, 400);
+    assert.match(response.headers.get("content-security-policy"), /script-src 'nonce-[A-Za-z0-9+/=]+'/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const html = await response.text();
+    assert.match(html, /<script nonce="[A-Za-z0-9+/=]+">/);
+  });
+});
+
+test("login rate limit blocks repeated invalid requests", async () => {
+  await withServer(async (url) => {
+    let last;
+    for (let i = 0; i < 9; i += 1) {
+      last = await fetch(url + "/api/v1/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "", password: "" })
+      });
+    }
+    assert.equal(last.status, 429);
+    assert.equal((await last.json()).error, "RATE_LIMITED");
+  });
+});
