@@ -7,7 +7,7 @@ Node.js 24 · Express · PostgreSQL (Aiven) · Google Drive · Sharp.
 La rama original expuso el archivo `Coinpsi-API.env` en un repositorio público. Contenía una cadena PostgreSQL con contraseña y un secreto JWT. **Considerar ambos comprometidos.**
 
 1. Rotar la contraseña del usuario PostgreSQL en Aiven, actualizar `DATABASE_URL` en Render y revocar el acceso anterior.
-2. Generar un nuevo `JWT_SECRET` aleatorio (32 bytes o más); actualizar Render. Los tokens previos dejarán de funcionar.
+2. Generar un nuevo `JWT_SECRET` aleatorio (32 bytes o más) ejecutando localmente `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64'))"`; actualizar Render. Los tokens previos dejarán de funcionar.
 3. Revisar logs y credenciales adicionales de Aiven y Render.
 4. Eliminar el archivo del árbol Git **no lo elimina del historial ni de clones**. Coordinar saneamiento histórico posteriormente y nunca volver a publicar secretos.
 5. Configurar `DATABASE_SSL=true` y suministrar la CA de Aiven mediante `DATABASE_CA_CERT_PATH` o `DATABASE_CA_CERT`.

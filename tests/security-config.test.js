@@ -31,3 +31,18 @@ test("production requires a strong JWT secret", () => {
     }
   }
 });
+
+test("production rejects predictable placeholder secrets", () => {
+  const prev = { NODE_ENV: process.env.NODE_ENV, DATABASE_SSL: process.env.DATABASE_SSL, JWT_SECRET: process.env.JWT_SECRET };
+  try {
+    process.env.NODE_ENV = "production";
+    process.env.DATABASE_SSL = "true";
+    process.env.JWT_SECRET = "REPLACE_WITH_32_PLUS_RANDOM_BYTES";
+    assert.throws(assertProductionSecurity, /JWT_SECRET/);
+  } finally {
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
