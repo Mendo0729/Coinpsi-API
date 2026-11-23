@@ -10,4 +10,9 @@ const loginLimiter = rateLimit({
   standardHeaders: "draft-7", legacyHeaders: false,
   skipSuccessfulRequests: true, message: response
 });
-module.exports = { generalLimiter, loginLimiter };
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 5,
+  standardHeaders: "draft-7", legacyHeaders: false,
+  message: response
+});
+module.exports = { generalLimiter, loginLimiter, contactLimiter };
