@@ -24,7 +24,7 @@ app.use(helmet());
 
 const adminOrigin = (process.env.ADMIN_ORIGIN || "http://localhost:3001").replace(/\/$/, "");
 const landingOrigin = (process.env.LANDING_ORIGIN || "http://localhost:3000").replace(/\/$/, "");
-const allowedOrigins = new Set([adminOrigin, landingOrigin, "https://www.coinpsi.org"]);
+const allowedOrigins = new Set([adminOrigin, landingOrigin, "https://coinpsi.org", "https://www.coinpsi.org"]);
 
 app.use(
   cors({
