@@ -145,12 +145,52 @@ async function listChildImages(drive, folderId, pageToken) {
   };
 }
 
+// Prevent a broad Drive OAuth grant from granting access to arbitrary folders.
+async function assertFileWithinRoot(drive, fileId, initialParents) {
+  const rootId = normalizeFileId(getEnv("GOOGLE_DRIVE_ROOT_FOLDER_ID"));
+  let currentId = normalizeFileId(fileId);
+  let parents = initialParents;
+  const visited = new Set();
+
+  if (currentId === rootId) return;
+
+  // Google Drive files have a single parent. Limit traversal to avoid cycles
+  // and excessive API requests if unexpected metadata is returned.
+  for (let depth = 0; depth < 32; depth += 1) {
+    if (visited.has(currentId)) break;
+    visited.add(currentId);
+
+    if (!Array.isArray(parents)) {
+      const response = await drive.files.get({
+        fileId: currentId,
+        fields: "id,parents,trashed"
+      });
+      if (response.data.trashed) break;
+      parents = response.data.parents;
+    }
+
+    if (!Array.isArray(parents) || parents.length === 0) break;
+    const parentId = parents[0];
+    if (parentId === rootId) return;
+    if (!FILE_ID_PATTERN.test(parentId)) break;
+
+    currentId = parentId;
+    parents = undefined;
+  }
+
+  throw createDriveError(
+    "GOOGLE_DRIVE_OUTSIDE_ROOT",
+    "El archivo o carpeta no pertenece al espacio autorizado de COINPSI."
+  );
+}
+
 async function listDriveFolder(folderId = null, pageToken = null) {
   const normalizedFolderId = normalizeFileId(
     folderId,
     getEnv("GOOGLE_DRIVE_ROOT_FOLDER_ID")
   );
   const drive = createDriveClient();
+  await assertFileWithinRoot(drive, normalizedFolderId);
 
   const folderResponse = await drive.files.get({
     fileId: normalizedFolderId,
@@ -190,6 +230,7 @@ async function getDriveImageMetadata(fileId) {
     throw createDriveError("GOOGLE_DRIVE_IMAGE_INVALID", "El archivo solicitado no es una imagen disponible.");
   }
 
+  await assertFileWithinRoot(drive, normalizedFileId, response.data.parents);
   return response.data;
 }
 
@@ -263,5 +304,6 @@ module.exports = {
   getDriveImageContent,
   getDriveImageMetadata,
   getDriveThumbnailBuffer,
-  listDriveFolder
+  listDriveFolder,
+  assertFileWithinRoot
 };
