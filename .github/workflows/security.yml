@@ -29,3 +29,21 @@ jobs:
         run: npm test
       - name: Full dependency audit
         run: npm audit --omit=dev
+
+  smoke:
+    name: Live API smoke tests
+    needs: security
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Check deployed API health and public routes
+        env:
+          API_BASE_URL: https://coinpsi-api.mendotech.lat
+        run: node scripts/smoke-api.js
