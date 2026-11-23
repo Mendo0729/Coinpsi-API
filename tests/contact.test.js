@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { validateContact } = require("../src/validators/contact.validator");
 const { buildContactEmail, sendContactEmail } = require("../src/services/contact-email.service");
+process.env.LANDING_ORIGIN = "https://coinpsi.org";
 const app = require("../src/app");
 
 const sample = {
