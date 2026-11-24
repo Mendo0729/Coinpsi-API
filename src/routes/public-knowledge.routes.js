@@ -1,11 +1,12 @@
-const express = require("express");
-
-const {
-  listPublishedPosts
-} = require("../controllers/public-knowledge.controller");
-
-const router = express.Router();
-
-router.get("/posts", listPublishedPosts);
-
-module.exports = router;
+const express=require("express");
+const {rateLimit}=require("express-rate-limit");
+const {listPublishedPosts,catalog,categories,detail,view,download}=require("../controllers/public-knowledge.controller");
+const router=express.Router();
+const eventLimiter=rateLimit({windowMs:60000,limit:30,standardHeaders:true,legacyHeaders:false});
+router.get("/posts",listPublishedPosts);
+router.get("/categories",categories);
+router.get("/catalog",catalog);
+router.get("/catalog/:slug",detail);
+router.post("/catalog/:slug/view",eventLimiter,view);
+router.get("/catalog/:slug/download",eventLimiter,download);
+module.exports=router;
