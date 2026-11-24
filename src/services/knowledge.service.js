@@ -103,6 +103,26 @@ function createPostSlug(title) {
   return `${baseSlug}-${uniqueSuffix}`;
 }
 
+function normalizeDocument(payload) {
+  const raw = normalizeRequiredText(payload.driveUrl, "driveUrl", 1000);
+  let url;
+  try { url = new URL(raw); } catch { throw createValidationError("Enlace de Drive inválido.", {field:"driveUrl"}); }
+  const match = /^\/file\/d\/([A-Za-z0-9_-]{10,255})(?:\/view|\/preview)?\/?$/.exec(url.pathname);
+  if (url.protocol !== "https:" || url.host !== "drive.google.com" || url.username || url.password || !match) {
+    throw createValidationError("Se requiere un enlace de archivo de Google Drive.", {field:"driveUrl"});
+  }
+  const documentType = String(payload.documentType || "research");
+  if (!["research","article","guide","report","journal"].includes(documentType)) throw createValidationError("Tipo de documento inválido.", {field:"documentType"});
+  const keywords = payload.keywords ?? [];
+  if (!Array.isArray(keywords) || keywords.length > 20 || keywords.some(k => typeof k !== "string" || !k.trim() || k.length > 80)) throw createValidationError("Palabras clave inválidas.", {field:"keywords"});
+  const publicationDate = payload.publicationDate || null;
+  if (publicationDate !== null && (typeof publicationDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(publicationDate) || !Number.isFinite(Date.parse(publicationDate)) || new Date(publicationDate).toISOString().slice(0,10) !== publicationDate)) throw createValidationError("Fecha inválida.", {field:"publicationDate"});
+  const canonical = new URL("https://drive.google.com/file/d/" + match[1] + "/view");
+  const key = url.searchParams.get("resourcekey");
+  if (key && /^[A-Za-z0-9_-]{1,255}$/.test(key)) canonical.searchParams.set("resourcekey", key);
+  return {driveUrl:canonical.href, driveFileId:match[1], documentType, keywords:keywords.map(k=>k.trim()), publicationDate};
+}
+
 async function normalizePostPayload(payload = {}, { allowArchived = false } = {}) {
   const categoryId = normalizeId(payload.categoryId, "categoryId");
 
@@ -115,7 +135,7 @@ async function normalizePostPayload(payload = {}, { allowArchived = false } = {}
   return {
     title: normalizeRequiredText(payload.title, "title", 180),
     summary: normalizeRequiredText(payload.summary, "summary", 350),
-    content: normalizeRequiredText(payload.content, "content", 50000),
+    ...normalizeDocument(payload),
     coverImageUrl: normalizeOptionalText(payload.coverImageUrl, "coverImageUrl", 500),
     authorName: normalizeRequiredText(payload.authorName, "authorName", 150),
     categoryId,
