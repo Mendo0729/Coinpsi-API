@@ -5,10 +5,16 @@ const ADMIN_POST_FIELDS = `
   kp.title,
   kp.slug,
   kp.summary,
-  kp.content,
+  kp.drive_url,
+  kp.drive_file_id,
+  kp.document_type,
+  kp.keywords,
+  kp.publication_date,
   kp.cover_image_url,
   kp.author_name,
   kp.category_id,
+  kp.views_count,
+  kp.downloads_count,
   kp.status,
   kp.is_featured,
   kp.show_on_landing,
@@ -29,7 +35,11 @@ const PUBLIC_POST_FIELDS = `
   kp.title,
   kp.slug,
   kp.summary,
-  kp.content,
+  kp.drive_url,
+  kp.drive_file_id,
+  kp.document_type,
+  kp.keywords,
+  kp.publication_date,
   kp.cover_image_url,
   kp.author_name,
   kp.published_at,
@@ -57,12 +67,18 @@ function mapAdminPost(row) {
     title: row.title,
     slug: row.slug,
     summary: row.summary,
-    content: row.content,
+    driveUrl: row.drive_url,
+    driveFileId: row.drive_file_id,
+    documentType: row.document_type,
+    keywords: row.keywords,
+    publicationDate: row.publication_date,
     coverImageUrl: row.cover_image_url,
     authorName: row.author_name,
     categoryId: row.category_id,
     categoryName: row.category_name,
     categorySlug: row.category_slug,
+    viewsCount: row.views_count,
+    downloadsCount: row.downloads_count,
     status: row.status,
     isFeatured: row.is_featured,
     showOnLanding: row.show_on_landing,
@@ -83,7 +99,11 @@ function mapPublicPost(row) {
     title: row.title,
     slug: row.slug,
     summary: row.summary,
-    content: row.content,
+    driveUrl: row.drive_url,
+    driveFileId: row.drive_file_id,
+    documentType: row.document_type,
+    keywords: row.keywords,
+    publicationDate: row.publication_date,
     coverImageUrl: row.cover_image_url,
     authorName: row.author_name,
     publishedAt: row.published_at,
@@ -173,7 +193,7 @@ async function insertKnowledgePost(post) {
           title,
           slug,
           summary,
-          content,
+          drive_url, drive_file_id, document_type, keywords, publication_date,
           cover_image_url,
           author_name,
           category_id,
@@ -188,7 +208,7 @@ async function insertKnowledgePost(post) {
           $1,
           $2,
           $3,
-          $4,
+          $4, $10, $11, $12, $13,
           $5,
           $6,
           $7,
@@ -217,12 +237,12 @@ async function insertKnowledgePost(post) {
       post.title,
       post.slug,
       post.summary,
-      post.content,
+      post.driveUrl,
       post.coverImageUrl,
       post.authorName,
       post.categoryId,
       post.status,
-      post.createdBy
+      post.createdBy, post.driveFileId, post.documentType, post.keywords, post.publicationDate
     ]
   );
 
@@ -237,7 +257,11 @@ async function updateKnowledgePostById(id, post) {
         SET
           title = $2,
           summary = $3,
-          content = $4,
+          drive_url = $4,
+          drive_file_id = $10,
+          document_type = $11,
+          keywords = $12,
+          publication_date = $13,
           cover_image_url = $5,
           author_name = $6,
           category_id = $7,
@@ -275,12 +299,12 @@ async function updateKnowledgePostById(id, post) {
       id,
       post.title,
       post.summary,
-      post.content,
+      post.driveUrl,
       post.coverImageUrl,
       post.authorName,
       post.categoryId,
       post.status,
-      post.updatedBy
+      post.updatedBy, post.driveFileId, post.documentType, post.keywords, post.publicationDate
     ]
   );
 
@@ -372,7 +396,48 @@ async function deleteKnowledgePostById(id) {
   return result.rows[0]?.id ?? null;
 }
 
+const catalogFrom = `FROM coinpsi.knowledge_posts kp
+ JOIN coinpsi.knowledge_categories kc ON kc.id=kp.category_id
+ WHERE kp.status='published' AND kc.is_active=TRUE
+ AND kp.drive_file_id IS NOT NULL AND kp.drive_url IS NOT NULL`;
+const catalogDate = "COALESCE(kp.publication_date, (kp.published_at AT TIME ZONE 'UTC')::date)";
+
+async function listCatalog({search,category,year,type,page,limit,sort}) {
+  const params=[];
+  const bind=value=>{params.push(value);return "$"+params.length;};
+  const filters=[];
+  if(search) {
+    const q=bind(search);
+    filters.push(`(strpos(lower(kp.title),lower(${q}))>0 OR strpos(lower(kp.summary),lower(${q}))>0 OR strpos(lower(kp.author_name),lower(${q}))>0 OR strpos(lower(array_to_string(kp.keywords,' ')),lower(${q}))>0)`);
+  }
+  if(category) filters.push("kc.slug="+bind(category));
+  if(year) filters.push("EXTRACT(YEAR FROM "+catalogDate+")="+bind(year)+"::int");
+  if(type) filters.push("kp.document_type="+bind(type));
+  const where=catalogFrom+(filters.length?" AND "+filters.join(" AND "):"");
+  const count=await pool.query("SELECT count(*) AS total "+where,params.slice());
+  const direction=sort==="oldest"?"ASC":"DESC";
+  const result=await pool.query(`SELECT ${PUBLIC_POST_FIELDS} ${where} ORDER BY ${catalogDate} ${direction} NULLS LAST,kp.id ${direction} LIMIT ${bind(limit)} OFFSET ${bind((page-1)*limit)}`,params);
+  return {posts:result.rows.map(mapPublicPost),total:Number(count.rows[0].total),page,limit};
+}
+
+async function findCatalogPost(slug) {
+  const result=await pool.query(`SELECT ${PUBLIC_POST_FIELDS} ${catalogFrom} AND kp.slug=$1`,[slug]);
+  return result.rows[0]?mapPublicPost(result.rows[0]):null;
+}
+
+async function recordCatalogEvent(slug,event) {
+  const column=event==="view"?"views_count":"downloads_count";
+  const result=await pool.query(`UPDATE coinpsi.knowledge_posts kp SET ${column}=${column}+1
+    FROM coinpsi.knowledge_categories kc WHERE kc.id=kp.category_id AND kc.is_active
+    AND kp.status='published' AND kp.slug=$1 AND kp.drive_file_id IS NOT NULL AND kp.drive_url IS NOT NULL
+    RETURNING kp.drive_url,kp.drive_file_id`,[slug]);
+  return result.rows[0]||null;
+}
+
 module.exports = {
+  listCatalog,
+  findCatalogPost,
+  recordCatalogEvent,
   deleteKnowledgePostById,
   insertKnowledgePost,
   knowledgeCategoryExists,
